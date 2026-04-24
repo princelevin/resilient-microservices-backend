@@ -1,3 +1,4 @@
+const axios = require("axios");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
@@ -42,12 +43,57 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Placeholder routes for future services
-app.get("/api/products", (req, res) => {
-  res.json({
-    message: "Product Service route will be connected here",
-    requestId: req.requestId,
-  });
+app.get("/api/products", async (req, res) => {
+  try {
+    const response = await axios.get(`${process.env.PRODUCT_SERVICE_URL}/products`, {
+      headers: {
+        "x-request-id": req.requestId,
+      },
+      timeout: 3000,
+    });
+
+    res.json({
+      gateway: SERVICE_NAME,
+      routedTo: "product-service",
+      data: response.data,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    res.status(500).json({
+      gateway: SERVICE_NAME,
+      error: "Product Service is unavailable",
+      details: error.message,
+      requestId: req.requestId,
+    });
+  }
+});
+
+app.get("/api/products/:id", async (req, res) => {
+  try {
+    const response = await axios.get(
+      `${process.env.PRODUCT_SERVICE_URL}/products/${req.params.id}`,
+      {
+        headers: {
+          "x-request-id": req.requestId,
+        },
+        timeout: 3000,
+      }
+    );
+
+    res.json({
+      gateway: SERVICE_NAME,
+      routedTo: "product-service",
+      data: response.data,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      gateway: SERVICE_NAME,
+      error: "Failed to fetch product",
+      details: error.response?.data || error.message,
+      requestId: req.requestId,
+    });
+  }
 });
 
 app.get("/api/orders", (req, res) => {
