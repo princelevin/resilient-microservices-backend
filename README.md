@@ -18,6 +18,7 @@ This project demonstrates practical backend reliability patterns such as:
 - Payment Mock Service
 - PostgreSQL integration
 - Redis caching
+- Cache-aside pattern
 - Retry with backoff
 - Timeout handling
 - Circuit breaker pattern
@@ -40,6 +41,7 @@ This project demonstrates practical backend reliability patterns such as:
 - dotenv
 - UUID
 - pg
+- redis
 
 ---
 
@@ -97,6 +99,24 @@ Implemented:
 
 ---
 
+### Day 4: Redis Caching for Product Service
+
+Added Redis caching to reduce repeated PostgreSQL reads for product data.
+
+Implemented:
+
+- Redis container using Docker Compose
+- Redis client setup in `product-service/src/db/redis.js`
+- Redis connection check in Product Service health endpoint
+- Cache-aside pattern for `/products`
+- Cache-aside pattern for `/products/:id`
+- Cache TTL using `CACHE_TTL_SECONDS`
+- Cache HIT and MISS response indicators
+- Cache clearing endpoint using `DELETE /cache`
+- API Gateway continues routing to Redis-backed Product Service
+
+---
+
 ## Architecture Flow
 
 Current working flow:
@@ -108,6 +128,8 @@ API Gateway
   ↓
 Product Service
   ↓
+Redis Cache
+  ↓
 PostgreSQL
 ```
 
@@ -115,7 +137,11 @@ The client calls the API Gateway on port `4000`.
 
 The API Gateway internally calls the Product Service on port `4001`.
 
-The Product Service reads product records from PostgreSQL.
+The Product Service checks Redis first.
+
+If data is available in Redis, the response is returned from cache.
+
+If data is not available in Redis, the Product Service reads from PostgreSQL and stores the result in Redis.
 
 This keeps the Product Service hidden behind the Gateway and makes the Gateway the single entry point for clients.
 
@@ -154,7 +180,9 @@ Responsibilities:
 - Return product by ID
 - Provide health check status
 - Connect to PostgreSQL
-- Read product records from the database
+- Connect to Redis
+- Read product records from PostgreSQL on cache miss
+- Return product records from Redis on cache hit
 - Receive request ID from API Gateway
 - Return service-specific response
 
@@ -188,6 +216,27 @@ created_at
 
 ---
 
+### 4. Redis
+
+Redis is used as a caching layer for product reads.
+
+Current cache keys:
+
+```text
+products:all
+products:1
+products:2
+products:3
+```
+
+Current cache TTL:
+
+```text
+60 seconds
+```
+
+---
+
 ## API Gateway Endpoints
 
 ### Root Endpoint
@@ -214,6 +263,12 @@ GET /api/products
 
 Routes the request from API Gateway to Product Service.
 
+The Product Service checks Redis first.
+
+If cache is available, response comes from Redis.
+
+If cache is not available, response comes from PostgreSQL and is stored in Redis.
+
 ### Get Product By ID Through API Gateway
 
 ```http
@@ -226,7 +281,7 @@ Example:
 GET /api/products/1
 ```
 
-Routes the request from API Gateway to Product Service and returns a single product from PostgreSQL.
+Routes the request from API Gateway to Product Service and returns a single product.
 
 ---
 
@@ -246,7 +301,7 @@ Returns Product Service running status.
 GET /health
 ```
 
-Returns Product Service health status, database connection status, uptime, timestamp, and request ID.
+Returns Product Service health status, database connection status, Redis connection status, uptime, timestamp, and request ID.
 
 ### Get All Products
 
@@ -254,7 +309,21 @@ Returns Product Service health status, database connection status, uptime, times
 GET /products
 ```
 
-Returns the list of products from PostgreSQL.
+Returns the list of products.
+
+First request usually returns:
+
+```text
+cache: MISS
+source: postgresql
+```
+
+Repeated request returns:
+
+```text
+cache: HIT
+source: redis
+```
 
 ### Get Product By ID
 
@@ -268,11 +337,33 @@ Example:
 GET /products/1
 ```
 
-Returns one product by ID from PostgreSQL.
+Returns one product by ID.
+
+First request usually returns:
+
+```text
+cache: MISS
+source: postgresql
+```
+
+Repeated request returns:
+
+```text
+cache: HIT
+source: redis
+```
+
+### Clear Product Cache
+
+```http
+DELETE /cache
+```
+
+Clears product-related Redis cache keys.
 
 ---
 
-## Sample API Gateway Response
+## Sample API Gateway Response with Redis HIT
 
 Request:
 
@@ -288,7 +379,8 @@ Response:
   "routedTo": "product-service",
   "data": {
     "service": "product-service",
-    "source": "postgresql",
+    "source": "redis",
+    "cache": "HIT",
     "count": 3,
     "data": [
       {
@@ -313,9 +405,9 @@ Response:
         "created_at": "2026-04-25T08:33:02.906Z"
       }
     ],
-    "requestId": "2ee110c2-c76c-41b7-a861-81bdb8ee358f"
+    "requestId": "383169b8-e842-4978-8d08-733c5873c910"
   },
-  "requestId": "2ee110c2-c76c-41b7-a861-81bdb8ee358f"
+  "requestId": "383169b8-e842-4978-8d08-733c5873c910"
 }
 ```
 
@@ -336,15 +428,16 @@ Response:
   "service": "product-service",
   "status": "healthy",
   "database": "connected",
-  "uptime": 6.336462667,
-  "timestamp": "2026-04-25T08:33:32.781Z",
-  "requestId": "af2d6ff4-bfb0-476f-95d4-948761bc12f0"
+  "redis": "connected",
+  "uptime": 8.586583083,
+  "timestamp": "2026-04-25T09:02:23.011Z",
+  "requestId": "cbdf10e6-fabc-4d7c-86f9-7e6a53b1424e"
 }
 ```
 
 ---
 
-## Sample Product Service Products Response
+## Sample Product Service Cache MISS Response
 
 Request:
 
@@ -358,6 +451,7 @@ Response:
 {
   "service": "product-service",
   "source": "postgresql",
+  "cache": "MISS",
   "count": 3,
   "data": [
     {
@@ -382,7 +476,52 @@ Response:
       "created_at": "2026-04-25T08:33:02.906Z"
     }
   ],
-  "requestId": "acb023ad-df79-4bac-85fa-a1930e637234"
+  "requestId": "faa3da2e-eb06-4ee0-9416-79c7cf8359ac"
+}
+```
+
+---
+
+## Sample Product Service Cache HIT Response
+
+Request:
+
+```http
+GET http://localhost:4001/products
+```
+
+Response:
+
+```json
+{
+  "service": "product-service",
+  "source": "redis",
+  "cache": "HIT",
+  "count": 3,
+  "data": [
+    {
+      "id": 1,
+      "name": "Wireless Keyboard",
+      "price": 1299,
+      "stock": 25,
+      "created_at": "2026-04-25T08:33:02.906Z"
+    },
+    {
+      "id": 2,
+      "name": "Gaming Mouse",
+      "price": 899,
+      "stock": 40,
+      "created_at": "2026-04-25T08:33:02.906Z"
+    },
+    {
+      "id": 3,
+      "name": "USB-C Hub",
+      "price": 1999,
+      "stock": 15,
+      "created_at": "2026-04-25T08:33:02.906Z"
+    }
+  ],
+  "requestId": "935e5e1f-bb5f-45b2-bd6d-e737ad9c5694"
 }
 ```
 
@@ -414,8 +553,6 @@ The Product Service now reads from PostgreSQL instead of using hardcoded data.
 
 This makes the service closer to a real backend system because the API depends on an external database.
 
-Current flow:
-
 ```text
 Client → API Gateway → Product Service → PostgreSQL
 ```
@@ -423,6 +560,30 @@ Client → API Gateway → Product Service → PostgreSQL
 This also introduces an important production concern:
 
 If the database is disconnected, the Product Service health check should report the service as unhealthy.
+
+### Day 4 Learning
+
+The Product Service now uses Redis as a caching layer.
+
+This reduces repeated PostgreSQL reads for the same product data.
+
+The implemented pattern is cache-aside:
+
+```text
+Request comes in
+  ↓
+Check Redis
+  ↓
+If cache HIT, return cached data
+  ↓
+If cache MISS, read from PostgreSQL
+  ↓
+Store result in Redis
+  ↓
+Return response
+```
+
+This is important because production systems should avoid hitting the database for every repeated read request.
 
 ---
 
@@ -442,6 +603,7 @@ resilient-microservices-backend
 │   ├── src
 │   │   ├── db
 │   │   │   ├── pool.js
+│   │   │   ├── redis.js
 │   │   │   └── init.sql
 │   │   └── server.js
 │   ├── package.json
@@ -461,23 +623,44 @@ resilient-microservices-backend
 
 ## How to Run the Project
 
-At the current stage, three parts are needed:
+At the current stage, four parts are needed:
 
 - PostgreSQL
+- Redis
 - Product Service
 - API Gateway
 
 ---
 
-## Run PostgreSQL
+## Run PostgreSQL and Redis
 
-Make sure PostgreSQL is running locally.
-
-Create the database:
+Start Docker containers:
 
 ```bash
-createdb resilient_microservices
+docker compose up -d
 ```
+
+Check running containers:
+
+```bash
+docker ps
+```
+
+Test Redis:
+
+```bash
+docker exec -it resilient-redis redis-cli ping
+```
+
+Expected output:
+
+```text
+PONG
+```
+
+---
+
+## Initialize PostgreSQL Data
 
 Run the SQL setup script:
 
@@ -539,6 +722,12 @@ GET http://localhost:4001/products
 GET http://localhost:4001/products/1
 ```
 
+Clear cache:
+
+```bash
+curl -X DELETE http://localhost:4001/cache
+```
+
 ---
 
 ## Run API Gateway
@@ -598,6 +787,9 @@ DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_NAME=resilient_microservices
+
+REDIS_URL=redis://localhost:6379
+CACHE_TTL_SECONDS=60
 ```
 
 If PostgreSQL is configured with the local Mac username instead of `postgres`, update `DB_USER` and `DB_PASSWORD` accordingly.
@@ -624,6 +816,12 @@ Add product service and gateway routing
 Add PostgreSQL integration for product service
 ```
 
+### Day 4 Commit
+
+```text
+Add Redis caching for product service
+```
+
 ---
 
 ## Project Status
@@ -644,6 +842,11 @@ Add PostgreSQL integration for product service
 - Product APIs now read from PostgreSQL
 - Database health check added
 - SQL init script added
+- Redis caching for Product Service
+- Cache HIT/MISS handling
+- Cache TTL added
+- Redis health check added
+- Cache clearing endpoint added
 
 ### In Progress
 
@@ -651,9 +854,6 @@ Add PostgreSQL integration for product service
 
 ### Next Steps
 
-- Add Docker Compose setup for PostgreSQL and Redis
-- Add Redis caching for product reads
-- Add cache hit and cache miss logs
 - Add timeout and retry simulation
 - Add circuit breaker behavior
 - Add Auth Service with JWT
@@ -661,6 +861,7 @@ Add PostgreSQL integration for product service
 - Add Payment Mock Service
 - Add structured logs
 - Add architecture diagram
+- Add full Docker Compose support for running all services together
 
 ---
 
