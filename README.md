@@ -117,6 +117,37 @@ Implemented:
 
 ---
 
+### Day 5: Payment Mock Service and Failure Simulation
+
+Created a separate Payment Service to simulate downstream payment provider behavior.
+
+Implemented:
+
+- Independent Payment Service running on port `4002`
+- Payment Service root endpoint `/`
+- Payment Service health endpoint `/health`
+- Payment simulation endpoint `POST /payments`
+- Successful payment simulation using `mode: "success"`
+- Failed payment simulation using `mode: "failure"`
+- Slow payment simulation using `mode: "slow"`
+- Random payment simulation using `mode: "random"`
+- Input validation for `orderId` and `amount`
+- Request ID generation for every payment request
+- Basic service logs for payment requests
+
+Current Payment Service behavior:
+
+```text
+success → returns successful payment response
+failure → returns failed payment response
+slow    → waits 5 seconds before responding
+random  → randomly returns success or failure
+```
+
+This service will later be called by the Order Service to test timeout, retry, and circuit breaker patterns.
+
+---
+
 ## Architecture Flow
 
 Current working flow:
@@ -131,6 +162,10 @@ Product Service
 Redis Cache
   ↓
 PostgreSQL
+
+Payment Service
+  ↓
+success / failure / slow / random simulation
 ```
 
 The client calls the API Gateway on port `4000`.
@@ -142,6 +177,10 @@ The Product Service checks Redis first.
 If data is available in Redis, the response is returned from cache.
 
 If data is not available in Redis, the Product Service reads from PostgreSQL and stores the result in Redis.
+
+The Payment Service currently runs independently on port `4002` and simulates downstream payment provider behavior.
+
+This Payment Service will later be connected to the Order Service for timeout, retry, and circuit breaker testing.
 
 This keeps the Product Service hidden behind the Gateway and makes the Gateway the single entry point for clients.
 
@@ -235,6 +274,28 @@ Current cache TTL:
 60 seconds
 ```
 
+---
+
+### 5. Payment Service
+
+The Payment Service simulates payment provider behavior.
+
+Responsibilities:
+
+- Process mock payment requests
+- Simulate successful payments
+- Simulate failed payments
+- Simulate slow payment provider responses
+- Simulate random downstream failures
+- Validate payment request input
+- Return request IDs for traceability
+
+Runs on:
+
+````md
+```text
+http://localhost:4002
+```
 ---
 
 ## API Gateway Endpoints
@@ -360,6 +421,51 @@ DELETE /cache
 ```
 
 Clears product-related Redis cache keys.
+
+---
+
+## Payment Service Endpoints
+
+### Root Endpoint
+
+```http
+GET /
+```
+
+Returns Payment Service running status.
+
+### Health Check Endpoint
+
+```http
+GET /health
+```
+
+Returns Payment Service health status, uptime, timestamp, and request ID.
+
+### Process Mock Payment
+
+```http
+POST /payments
+```
+
+Request body:
+
+```json
+{
+  "orderId": "ORD-1001",
+  "amount": 1299,
+  "mode": "success"
+}
+```
+
+Supported payment modes:
+
+```text
+success
+failure
+slow
+random
+```
 
 ---
 
@@ -527,6 +633,146 @@ Response:
 
 ---
 
+## Sample Payment Service Success Response
+
+Request:
+
+```http
+POST http://localhost:4002/payments
+```
+
+Body:
+
+```json
+{
+  "orderId": "ORD-1001",
+  "amount": 1299,
+  "mode": "success"
+}
+```
+
+Response:
+
+```json
+{
+  "service": "payment-service",
+  "status": "success",
+  "message": "Payment processed successfully",
+  "paymentId": "PAY-...",
+  "orderId": "ORD-1001",
+  "amount": 1299,
+  "mode": "success",
+  "requestId": "..."
+}
+```
+
+---
+
+## Sample Payment Service Failure Response
+
+Request:
+
+```http
+POST http://localhost:4002/payments
+```
+
+Body:
+
+```json
+{
+  "orderId": "ORD-1002",
+  "amount": 899,
+  "mode": "failure"
+}
+```
+
+Response:
+
+```json
+{
+  "service": "payment-service",
+  "status": "failed",
+  "message": "Payment failed due to insufficient funds",
+  "orderId": "ORD-1002",
+  "amount": 899,
+  "mode": "failure",
+  "requestId": "..."
+}
+```
+
+---
+
+## Sample Payment Service Slow Response
+
+Request:
+
+```http
+POST http://localhost:4002/payments
+```
+
+Body:
+
+```json
+{
+  "orderId": "ORD-1003",
+  "amount": 1999,
+  "mode": "slow"
+}
+```
+
+Response:
+
+```json
+{
+  "service": "payment-service",
+  "status": "success",
+  "message": "Payment processed successfully after delay",
+  "paymentId": "PAY-SLOW-...",
+  "orderId": "ORD-1003",
+  "amount": 1999,
+  "mode": "slow",
+  "delayMs": 5000,
+  "requestId": "..."
+}
+```
+
+---
+
+## Sample Payment Service Random Response
+
+Request:
+
+```http
+POST http://localhost:4002/payments
+```
+
+Body:
+
+```json
+{
+  "orderId": "ORD-1004",
+  "amount": 500,
+  "mode": "random"
+}
+```
+
+Response can return either success or failure:
+
+```json
+{
+  "service": "payment-service",
+  "status": "success",
+  "message": "Random payment succeeded",
+  "paymentId": "PAY-RANDOM-...",
+  "orderId": "ORD-1004",
+  "amount": 500,
+  "mode": "random",
+  "requestId": "..."
+}
+```
+
+---
+
 ## Key Learning So Far
 
 ### Day 1 Learning
@@ -585,6 +831,23 @@ Return response
 
 This is important because production systems should avoid hitting the database for every repeated read request.
 
+### Day 5 Learning
+
+The Payment Service simulates a downstream dependency that may succeed, fail, respond slowly, or behave unpredictably.
+
+This is important because real microservices rarely operate in perfect conditions.
+
+A service calling a payment provider must be prepared for:
+
+- Slow responses
+- Failed payments
+- Random downstream failures
+- Invalid request data
+- Retry decisions
+- Timeout handling
+
+This Payment Service will be used later to implement timeout, retry with backoff, and circuit breaker behavior.
+
 ---
 
 ## Project Structure
@@ -613,6 +876,11 @@ resilient-microservices-backend
 ├── auth-service
 ├── order-service
 ├── payment-service
+│   ├── src
+│   │   └── server.js
+│   ├── package.json
+│   ├── package-lock.json
+│   └── .env
 │
 ├── docker-compose.yml
 ├── README.md
@@ -623,12 +891,13 @@ resilient-microservices-backend
 
 ## How to Run the Project
 
-At the current stage, four parts are needed:
+At the current stage, five parts are used:
 
 - PostgreSQL
 - Redis
 - Product Service
 - API Gateway
+- Payment Service
 
 ---
 
@@ -766,6 +1035,41 @@ GET http://localhost:4000/api/products/1
 
 ---
 
+## Run Payment Service
+
+Open another terminal and go inside the Payment Service folder:
+
+```bash
+cd payment-service
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the Payment Service:
+
+```bash
+npm run dev
+```
+
+Payment Service runs on:
+
+```text
+http://localhost:4002
+```
+
+Test Payment Service:
+
+```http
+GET http://localhost:4002/health
+POST http://localhost:4002/payments
+```
+
+---
+
 ## Environment Variables
 
 ### API Gateway `.env`
@@ -793,6 +1097,13 @@ CACHE_TTL_SECONDS=60
 ```
 
 If PostgreSQL is configured with the local Mac username instead of `postgres`, update `DB_USER` and `DB_PASSWORD` accordingly.
+
+### Payment Service `.env`
+
+```env
+PORT=4002
+SERVICE_NAME=payment-service
+```
 
 ---
 
@@ -822,6 +1133,12 @@ Add PostgreSQL integration for product service
 Add Redis caching for product service
 ```
 
+### Day 5 Commit
+
+```text
+Add payment mock service with failure simulation
+```
+
 ---
 
 ## Project Status
@@ -847,6 +1164,13 @@ Add Redis caching for product service
 - Cache TTL added
 - Redis health check added
 - Cache clearing endpoint added
+- Payment Mock Service setup
+- Payment Service health check
+- Payment success simulation
+- Payment failure simulation
+- Payment slow response simulation
+- Payment random failure simulation
+- Payment request validation
 
 ### In Progress
 
@@ -858,7 +1182,6 @@ Add Redis caching for product service
 - Add circuit breaker behavior
 - Add Auth Service with JWT
 - Add Order Service
-- Add Payment Mock Service
 - Add structured logs
 - Add architecture diagram
 - Add full Docker Compose support for running all services together
