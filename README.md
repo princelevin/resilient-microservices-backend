@@ -148,6 +148,46 @@ This service will later be called by the Order Service to test timeout, retry, a
 
 ---
 
+### Day 6: Order Service with Payment Timeout and Retry
+
+Created an Order Service that calls the Payment Service and handles downstream payment failures.
+
+Implemented:
+
+- Independent Order Service running on port `4003`
+- Order Service root endpoint `/`
+- Order Service health endpoint `/health`
+- Order creation endpoint `POST /orders`
+- Payment Service client using Axios
+- Request ID forwarding from Order Service to Payment Service
+- Timeout handling for slow payment responses
+- Retry logic for failed payment calls
+- Exponential backoff between retry attempts
+- Controlled failure response when payment retries are exhausted
+
+Current Order Service behavior:
+
+```text
+payment success → order confirmed
+payment failure → order failed after retries
+payment slow    → timeout + retry + controlled failure
+payment random  → order confirmed or failed depending on downstream response
+```
+
+Current Day 6 flow:
+
+```text
+Client
+  ↓
+Order Service
+  ↓
+Payment Service
+```
+
+This prepares the project for circuit breaker implementation in the next step.
+
+---
+
 ## Architecture Flow
 
 Current working flow:
@@ -163,9 +203,11 @@ Redis Cache
   ↓
 PostgreSQL
 
-Payment Service
+Client
   ↓
-success / failure / slow / random simulation
+Order Service
+  ↓
+Payment Service
 ```
 
 The client calls the API Gateway on port `4000`.
@@ -178,11 +220,13 @@ If data is available in Redis, the response is returned from cache.
 
 If data is not available in Redis, the Product Service reads from PostgreSQL and stores the result in Redis.
 
-The Payment Service currently runs independently on port `4002` and simulates downstream payment provider behavior.
+The Payment Service runs independently on port `4002` and simulates downstream payment provider behavior.
 
-This Payment Service will later be connected to the Order Service for timeout, retry, and circuit breaker testing.
+The Order Service runs independently on port `4003` and calls the Payment Service.
 
-This keeps the Product Service hidden behind the Gateway and makes the Gateway the single entry point for clients.
+The Order Service handles payment success, payment failure, slow payment responses, timeout handling, retry attempts, and exponential backoff.
+
+This keeps product-related APIs behind the Gateway and allows order/payment reliability behavior to be tested independently.
 
 ---
 
@@ -294,6 +338,30 @@ Runs on:
 
 ```text
 http://localhost:4002
+```
+
+---
+
+### 6. Order Service
+
+The Order Service creates mock orders and calls the Payment Service.
+
+Responsibilities:
+
+- Accept mock order requests
+- Create order IDs
+- Call Payment Service
+- Forward request IDs to Payment Service
+- Handle payment success
+- Handle payment failure
+- Handle slow payment responses with timeout
+- Retry failed payment calls with exponential backoff
+- Return controlled order success or failure responses
+
+Runs on:
+
+```text
+http://localhost:4003
 ```
 ---
 
@@ -465,6 +533,54 @@ failure
 slow
 random
 ```
+
+---
+
+## Order Service Endpoints
+
+### Root Endpoint
+
+```http
+GET /
+```
+
+Returns Order Service running status.
+
+### Health Check Endpoint
+
+```http
+GET /health
+```
+
+Returns Order Service health status, uptime, timestamp, and request ID.
+
+### Create Mock Order
+
+```http
+POST /orders
+```
+
+Request body:
+
+```json
+{
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
+}
+```
+
+Supported payment modes:
+
+```text
+success
+failure
+slow
+random
+```
+
+The Order Service uses the selected `paymentMode` while calling the Payment Service.
 
 ---
 
@@ -772,6 +888,162 @@ Response can return either success or failure:
 
 ---
 
+## Sample Order Service Success Response
+
+Request:
+
+```http
+POST http://localhost:4003/orders
+```
+
+Body:
+
+```json
+{
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
+}
+```
+
+Response:
+
+```json
+{
+  "service": "order-service",
+  "status": "success",
+  "orderStatus": "CONFIRMED",
+  "message": "Order created and payment completed successfully",
+  "order": {
+    "orderId": "ORD-...",
+    "productId": 1,
+    "quantity": 1,
+    "amount": 1299
+  },
+  "payment": {
+    "success": true,
+    "attempts": [
+      {
+        "attempt": 1,
+        "status": "success",
+        "httpStatus": 200
+      }
+    ]
+  },
+  "requestId": "..."
+}
+```
+
+---
+
+## Sample Order Service Payment Failure Response
+
+Request:
+
+```http
+POST http://localhost:4003/orders
+```
+
+Body:
+
+```json
+{
+  "productId": 2,
+  "quantity": 1,
+  "amount": 899,
+  "paymentMode": "failure"
+}
+```
+
+Response:
+
+```json
+{
+  "service": "order-service",
+  "status": "failed",
+  "orderStatus": "PAYMENT_FAILED",
+  "message": "Order could not be completed because payment failed",
+  "payment": {
+    "success": false,
+    "attempts": [
+      {
+        "attempt": 1,
+        "status": "failed"
+      },
+      {
+        "attempt": 2,
+        "status": "failed"
+      },
+      {
+        "attempt": 3,
+        "status": "failed"
+      }
+    ]
+  },
+  "requestId": "..."
+}
+```
+
+---
+
+## Sample Order Service Slow Payment Timeout Response
+
+Request:
+
+```http
+POST http://localhost:4003/orders
+```
+
+Body:
+
+```json
+{
+  "productId": 3,
+  "quantity": 1,
+  "amount": 1999,
+  "paymentMode": "slow"
+}
+```
+
+Response:
+
+```json
+{
+  "service": "order-service",
+  "status": "failed",
+  "orderStatus": "PAYMENT_FAILED",
+  "message": "Order could not be completed because payment failed",
+  "payment": {
+    "success": false,
+    "error": {
+      "message": "Payment service timed out after 3 attempts",
+      "code": "ECONNABORTED"
+    },
+    "attempts": [
+      {
+        "attempt": 1,
+        "status": "failed",
+        "timeout": true
+      },
+      {
+        "attempt": 2,
+        "status": "failed",
+        "timeout": true
+      },
+      {
+        "attempt": 3,
+        "status": "failed",
+        "timeout": true
+      }
+    ]
+  },
+  "requestId": "..."
+}
+```
+
+---
+
 ## Key Learning So Far
 
 ### Day 1 Learning
@@ -847,6 +1119,40 @@ A service calling a payment provider must be prepared for:
 
 This Payment Service will be used later to implement timeout, retry with backoff, and circuit breaker behavior.
 
+### Day 6 Learning
+
+The Order Service now calls the Payment Service using timeout and retry logic.
+
+This is important because a service should not wait forever for a slow downstream dependency.
+
+The retry logic uses exponential backoff:
+
+```text
+Attempt 1 fails
+  ↓
+Wait 500ms
+  ↓
+Attempt 2 fails
+  ↓
+Wait 1000ms
+  ↓
+Attempt 3 fails
+  ↓
+Return controlled failure response
+```
+
+This shows that retries are not just about trying again.
+
+Retries need:
+
+- Timeout limits
+- Maximum retry count
+- Backoff delay
+- Controlled failure response
+- Request ID tracing
+
+This prepares the project for circuit breaker behavior.
+
 ---
 
 ## Project Structure
@@ -874,6 +1180,14 @@ resilient-microservices-backend
 │
 ├── auth-service
 ├── order-service
+│   ├── src
+│   │   ├── clients
+│   │   │   └── paymentClient.js
+│   │   └── server.js
+│   ├── package.json
+│   ├── package-lock.json
+│   └── .env
+│
 ├── payment-service
 │   ├── src
 │   │   └── server.js
@@ -890,13 +1204,14 @@ resilient-microservices-backend
 
 ## How to Run the Project
 
-At the current stage, five parts are used:
+At the current stage, six parts are used:
 
 - PostgreSQL
 - Redis
 - Product Service
 - API Gateway
 - Payment Service
+- Order Service
 
 ---
 
@@ -1069,6 +1384,41 @@ POST http://localhost:4002/payments
 
 ---
 
+## Run Order Service
+
+Open another terminal and go inside the Order Service folder:
+
+```bash
+cd order-service
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the Order Service:
+
+```bash
+npm run dev
+```
+
+Order Service runs on:
+
+```text
+http://localhost:4003
+```
+
+Test Order Service:
+
+```http
+GET http://localhost:4003/health
+POST http://localhost:4003/orders
+```
+
+---
+
 ## Environment Variables
 
 ### API Gateway `.env`
@@ -1102,6 +1452,16 @@ If PostgreSQL is configured with the local Mac username instead of `postgres`, u
 ```env
 PORT=4002
 SERVICE_NAME=payment-service
+```
+
+### Order Service `.env`
+
+```env
+PORT=4003
+SERVICE_NAME=order-service
+PAYMENT_SERVICE_URL=http://localhost:4002
+PAYMENT_TIMEOUT_MS=2000
+PAYMENT_MAX_RETRIES=3
 ```
 
 ---
@@ -1138,6 +1498,12 @@ Add Redis caching for product service
 Add payment mock service with failure simulation
 ```
 
+### Day 6 Commit
+
+```text
+Add order service with payment retry and timeout handling
+```
+
 ---
 
 ## Project Status
@@ -1170,6 +1536,14 @@ Add payment mock service with failure simulation
 - Payment slow response simulation
 - Payment random failure simulation
 - Payment request validation
+- Order Service setup
+- Order Service health check
+- Order creation endpoint
+- Payment Service client
+- Payment timeout handling
+- Payment retry handling
+- Exponential backoff for payment retries
+- Controlled payment failure response
 
 ### In Progress
 
@@ -1177,10 +1551,8 @@ Add payment mock service with failure simulation
 
 ### Next Steps
 
-- Add timeout and retry simulation
 - Add circuit breaker behavior
 - Add Auth Service with JWT
-- Add Order Service
 - Add structured logs
 - Add architecture diagram
 - Add full Docker Compose support for running all services together
