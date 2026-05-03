@@ -2,7 +2,10 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const { v4: uuidv4 } = require("uuid");
-const { processPaymentWithRetry } = require("./clients/paymentClient");
+const {
+  processPaymentWithRetry,
+  getPaymentCircuitBreakerStatus,
+} = require("./clients/paymentClient");
 require("dotenv").config();
 
 const app = express();
@@ -34,6 +37,15 @@ app.get("/health", (req, res) => {
     status: "healthy",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
+    requestId: req.requestId,
+  });
+});
+
+app.get("/circuit-breaker/payment", (req, res) => {
+  res.json({
+    service: SERVICE_NAME,
+    dependency: "payment-service",
+    circuitBreaker: getPaymentCircuitBreakerStatus(),
     requestId: req.requestId,
   });
 });
@@ -90,8 +102,10 @@ app.post("/orders", async (req, res) => {
       },
       payment: {
         success: false,
+        circuitBreakerOpen: paymentResult.circuitBreakerOpen || false,
         error: paymentResult.error,
         attempts: paymentResult.attempts,
+        circuitBreaker: paymentResult.circuitBreaker,
       },
       requestId: req.requestId,
     });
@@ -111,6 +125,7 @@ app.post("/orders", async (req, res) => {
     payment: {
       success: true,
       attempts: paymentResult.attempts,
+      circuitBreaker: paymentResult.circuitBreaker,
       response: paymentResult.paymentResponse,
     },
     requestId: req.requestId,

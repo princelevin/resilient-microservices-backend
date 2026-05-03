@@ -1,4 +1,5 @@
 const axios = require("axios");
+const CircuitBreaker = require("../resilience/circuitBreaker");
 require("dotenv").config();
 
 const PAYMENT_SERVICE_URL =
@@ -6,6 +7,15 @@ const PAYMENT_SERVICE_URL =
 
 const PAYMENT_TIMEOUT_MS = Number(process.env.PAYMENT_TIMEOUT_MS) || 2000;
 const PAYMENT_MAX_RETRIES = Number(process.env.PAYMENT_MAX_RETRIES) || 3;
+const CIRCUIT_BREAKER_FAILURE_THRESHOLD =
+  Number(process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD) || 3;
+const CIRCUIT_BREAKER_COOLDOWN_MS =
+  Number(process.env.CIRCUIT_BREAKER_COOLDOWN_MS) || 10000;
+
+const paymentCircuitBreaker = new CircuitBreaker({
+  failureThreshold: CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+  cooldownTimeMs: CIRCUIT_BREAKER_COOLDOWN_MS,
+});
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -16,6 +26,25 @@ function getBackoffDelay(attempt) {
 }
 
 async function processPaymentWithRetry(paymentPayload, requestId) {
+  if (!paymentCircuitBreaker.canCallService()) {
+    console.log(
+      `[CIRCUIT BREAKER] Payment call blocked. state=OPEN, requestId=${requestId}`
+    );
+
+    return {
+      success: false,
+      circuitBreakerOpen: true,
+      attempts: [],
+      error: {
+        message:
+          "Payment Service circuit is OPEN. Request blocked to protect the system.",
+        code: "CIRCUIT_OPEN",
+        httpStatus: 503,
+        circuitBreaker: paymentCircuitBreaker.getStatus(),
+      },
+    };
+  }
+
   let lastError = null;
   const attempts = [];
 
@@ -45,9 +74,12 @@ async function processPaymentWithRetry(paymentPayload, requestId) {
         httpStatus: response.status,
       });
 
+      paymentCircuitBreaker.recordSuccess();
+
       return {
         success: true,
         attempts,
+        circuitBreaker: paymentCircuitBreaker.getStatus(),
         paymentResponse: response.data,
       };
     } catch (error) {
@@ -81,9 +113,12 @@ async function processPaymentWithRetry(paymentPayload, requestId) {
     }
   }
 
+  paymentCircuitBreaker.recordFailure();
+
   return {
     success: false,
     attempts,
+    circuitBreaker: paymentCircuitBreaker.getStatus(),
     error: {
       message:
         lastError?.code === "ECONNABORTED"
@@ -97,6 +132,11 @@ async function processPaymentWithRetry(paymentPayload, requestId) {
   };
 }
 
+function getPaymentCircuitBreakerStatus() {
+  return paymentCircuitBreaker.getStatus();
+}
+
 module.exports = {
   processPaymentWithRetry,
+  getPaymentCircuitBreakerStatus,
 };
