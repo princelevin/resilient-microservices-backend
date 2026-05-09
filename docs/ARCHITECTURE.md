@@ -28,6 +28,12 @@ API Gateway
 Order Service
   ↓
 Payment Service
+
+Client
+  ↓
+Auth Service
+  ↓
+JWT Token
 ```
 
 ---
@@ -40,6 +46,7 @@ Payment Service
 | Product Service | 4001 | Handles product APIs and product data |
 | Payment Service | 4002 | Simulates payment provider behavior |
 | Order Service | 4003 | Creates orders and calls Payment Service |
+| Auth Service | 4004 | Handles user registration, login, JWT generation, and token verification |
 | PostgreSQL | 5432 | Stores product data |
 | Redis | 6379 | Caches product reads |
 
@@ -87,6 +94,30 @@ The Payment Service can simulate:
 - Failed payment
 - Slow payment
 - Random payment failure
+
+---
+
+## Auth Flow
+
+```text
+Client
+  ↓
+Auth Service
+  ↓
+JWT Token
+```
+
+The Auth Service handles user registration, login, password hashing, JWT token generation, and JWT verification.
+
+Current Auth Service behavior:
+
+- Register user
+- Hash password using bcrypt
+- Login user
+- Generate JWT token
+- Verify JWT token
+
+The JWT token will later be used to protect order creation APIs.
 
 ---
 
@@ -142,6 +173,24 @@ OPEN       → calls blocked after repeated failures
 HALF_OPEN  → one test call allowed after cooldown
 ```
 
+### JWT Authentication
+
+```text
+Register User
+  ↓
+Hash Password
+  ↓
+Login User
+  ↓
+Generate JWT Token
+  ↓
+Verify JWT Token
+```
+
+The Auth Service uses JWT-based authentication.
+
+Currently, token verification is available through the Auth Service. In the next step, the token will be used to protect Order Service APIs through the API Gateway.
+
 ---
 
 ## Current Implementation Status
@@ -158,7 +207,13 @@ Completed:
 - Retry with exponential backoff
 - Circuit breaker behavior for Payment Service calls
 - API Gateway routing for Order Service
+- Auth Service
+- User registration
+- User login
+- JWT token generation
+- JWT token verification
 
 In progress:
 
-- Auth Service with JWT
+- API Gateway routing for Auth Service
+- JWT protection for order APIs

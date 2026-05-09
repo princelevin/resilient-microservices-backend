@@ -176,6 +176,39 @@ Order Service can also be tested through API Gateway:
 GET http://localhost:4000/api/orders/health
 POST http://localhost:4000/api/orders
 GET http://localhost:4000/api/orders/circuit-breaker/payment
+```
+
+---
+
+## Run Auth Service
+
+```bash
+cd auth-service
+npm install
+npm run dev
+```
+
+Runs on:
+
+```text
+http://localhost:4004
+```
+
+Test:
+
+```http
+GET http://localhost:4004/health
+POST http://localhost:4004/auth/register
+POST http://localhost:4004/auth/login
+GET http://localhost:4004/auth/verify
+GET http://localhost:4004/auth/users
+```
+
+For token verification, add this header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
 
 ---
 
@@ -223,4 +256,13 @@ PAYMENT_TIMEOUT_MS=2000
 PAYMENT_MAX_RETRIES=3
 CIRCUIT_BREAKER_FAILURE_THRESHOLD=3
 CIRCUIT_BREAKER_COOLDOWN_MS=60000
+```
+
+### Auth Service
+
+```env
+PORT=4004
+SERVICE_NAME=auth-service
+JWT_SECRET=super-secret-jwt-key-change-later
+JWT_EXPIRES_IN=1h
 ```

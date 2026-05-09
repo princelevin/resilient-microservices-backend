@@ -55,6 +55,8 @@ Request body:
 GET /api/orders/circuit-breaker/payment
 ```
 
+> Auth Service is currently called directly on port `4004`. In the next step, Auth routes will be added through API Gateway.
+
 ---
 
 ## Product Service
@@ -329,3 +331,129 @@ Sample fast failure when circuit is open:
   }
 }
 ```
+
+---
+
+## Auth Service
+
+Base URL:
+
+```text
+http://localhost:4004
+```
+
+### Health Check
+
+```http
+GET /health
+```
+
+### Register User
+
+```http
+POST /auth/register
+```
+
+Request body:
+
+```json
+{
+  "name": "Prince Levin",
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+Sample response:
+
+```json
+{
+  "service": "auth-service",
+  "status": "success",
+  "message": "User registered successfully",
+  "user": {
+    "id": "USER-...",
+    "name": "Prince Levin",
+    "email": "prince@example.com"
+  }
+}
+```
+
+### Login User
+
+```http
+POST /auth/login
+```
+
+Request body:
+
+```json
+{
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+Sample response:
+
+```json
+{
+  "service": "auth-service",
+  "status": "success",
+  "message": "Login successful",
+  "token": "jwt-token-here",
+  "tokenType": "Bearer",
+  "expiresIn": "1h"
+}
+```
+
+### Verify JWT Token
+
+```http
+GET /auth/verify
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+Sample response:
+
+```json
+{
+  "service": "auth-service",
+  "status": "success",
+  "message": "Token is valid",
+  "user": {
+    "userId": "USER-...",
+    "email": "prince@example.com",
+    "name": "Prince Levin"
+  }
+}
+```
+
+### Get Registered Users
+
+```http
+GET /auth/users
+```
+
+Sample response:
+
+```json
+{
+  "service": "auth-service",
+  "count": 1,
+  "users": [
+    {
+      "id": "USER-...",
+      "name": "Prince Levin",
+      "email": "prince@example.com"
+    }
+  ]
+}
+```
+
+> Current Auth Service uses an in-memory user store. Registered users are cleared when the service restarts.

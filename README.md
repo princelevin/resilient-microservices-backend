@@ -26,6 +26,12 @@ API Gateway
 Order Service
   ↓
 Payment Service
+
+Client
+  ↓
+Auth Service
+  ↓
+JWT Token
 ```
 
 The Product Service is accessed through the API Gateway.
@@ -33,6 +39,8 @@ The Product Service is accessed through the API Gateway.
 The Order Service is accessed through the API Gateway and calls the Payment Service while handling downstream payment failures using timeout, retry, exponential backoff, and circuit breaker logic.
 
 Circuit breaker behavior is implemented to stop repeated calls to Payment Service when it is failing continuously.
+
+The Auth Service supports user registration, login, JWT token generation, and token verification.
 
 ---
 
@@ -49,6 +57,10 @@ Circuit breaker behavior is implemented to stop repeated calls to Payment Servic
 - Request ID tracing across services
 - Docker-based PostgreSQL and Redis setup
 - API Gateway routing for Order Service APIs
+- Auth Service with JWT-based authentication
+- User registration and login
+- JWT token generation and verification
+- Password hashing using bcrypt
 
 ---
 
@@ -66,6 +78,9 @@ Circuit breaker behavior is implemented to stop repeated calls to Payment Servic
 - UUID
 - pg
 - redis
+- JWT
+- bcryptjs
+- jsonwebtoken
 
 ---
 
@@ -77,6 +92,7 @@ Circuit breaker behavior is implemented to stop repeated calls to Payment Servic
 | Product Service | 4001 | Manages product APIs and product data |
 | Payment Service | 4002 | Simulates payment provider behavior |
 | Order Service | 4003 | Creates orders and calls Payment Service |
+| Auth Service | 4004 | Handles user registration, login, and JWT verification |
 | PostgreSQL | 5432 | Stores product data |
 | Redis | 6379 | Caches product reads |
 
@@ -108,14 +124,21 @@ Circuit breaker behavior is implemented to stop repeated calls to Payment Servic
 - API Gateway routing for Order Service
 - Order creation through API Gateway
 - Circuit breaker status access through API Gateway
+- Auth Service setup
+- User registration endpoint
+- User login endpoint
+- JWT token generation
+- JWT token verification endpoint
+- Password hashing with bcrypt
 
 ### In Progress
 
-- Auth Service with JWT
+- API Gateway routing for Auth Service
 
 ### Next Steps
 
-- Add Auth Service with JWT
+- Add API Gateway routing for Auth Service
+- Protect Order APIs using JWT
 - Add structured logging
 - Add architecture diagram
 - Add full Docker Compose support for running all services together
@@ -158,6 +181,14 @@ Run Order Service:
 
 ```bash
 cd order-service
+npm install
+npm run dev
+```
+
+Run Auth Service:
+
+```bash
+cd auth-service
 npm install
 npm run dev
 ```
@@ -240,6 +271,41 @@ slow
 random
 ```
 
+### Auth Service
+
+```http
+GET http://localhost:4004/health
+POST http://localhost:4004/auth/register
+POST http://localhost:4004/auth/login
+GET http://localhost:4004/auth/verify
+GET http://localhost:4004/auth/users
+```
+
+Example register request:
+
+```json
+{
+  "name": "Prince Levin",
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+Example login request:
+
+```json
+{
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+Verify token request header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
 ---
 
 ## Reliability Patterns Implemented
@@ -304,6 +370,24 @@ HALF_OPEN
 One test call allowed after cooldown
 ```
 
+### JWT Authentication
+
+The Auth Service allows users to register, login, and receive a JWT token.
+
+```text
+Register User
+  ↓
+Hash Password
+  ↓
+Login User
+  ↓
+Generate JWT Token
+  ↓
+Verify JWT Token
+```
+
+The JWT token will be used later to protect order creation APIs.
+
 ---
 
 ## Project Structure
@@ -348,6 +432,13 @@ resilient-microservices-backend
 │   └── .env
 │
 ├── auth-service
+│   ├── src
+│   │   ├── middleware
+│   │   │   └── authMiddleware.js
+│   │   └── server.js
+│   ├── package.json
+│   ├── package-lock.json
+│   └── .env
 │
 ├── docs
 │   ├── ARCHITECTURE.md
