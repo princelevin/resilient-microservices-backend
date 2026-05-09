@@ -21,6 +21,8 @@ PostgreSQL
 
 Client
   ↓
+API Gateway
+  ↓
 Order Service
   ↓
 Payment Service
@@ -28,7 +30,7 @@ Payment Service
 
 The Product Service is accessed through the API Gateway.
 
-The Order Service calls the Payment Service and handles downstream payment failures using timeout and retry logic.
+The Order Service is accessed through the API Gateway and calls the Payment Service while handling downstream payment failures using timeout, retry, exponential backoff, and circuit breaker logic.
 
 Circuit breaker behavior is implemented to stop repeated calls to Payment Service when it is failing continuously.
 
@@ -46,6 +48,7 @@ Circuit breaker behavior is implemented to stop repeated calls to Payment Servic
 - Circuit breaker pattern for Payment Service calls
 - Request ID tracing across services
 - Docker-based PostgreSQL and Redis setup
+- API Gateway routing for Order Service APIs
 
 ---
 
@@ -70,7 +73,7 @@ Circuit breaker behavior is implemented to stop repeated calls to Payment Servic
 
 | Service | Port | Responsibility |
 |---|---:|---|
-| API Gateway | 4000 | Routes client requests to backend services |
+| API Gateway | 4000 | Routes product and order requests to backend services |
 | Product Service | 4001 | Manages product APIs and product data |
 | Payment Service | 4002 | Simulates payment provider behavior |
 | Order Service | 4003 | Creates orders and calls Payment Service |
@@ -102,14 +105,16 @@ Circuit breaker behavior is implemented to stop repeated calls to Payment Servic
 - Circuit OPEN state for repeated payment failures
 - Circuit HALF_OPEN recovery after cooldown
 - Circuit CLOSED state after successful recovery
+- API Gateway routing for Order Service
+- Order creation through API Gateway
+- Circuit breaker status access through API Gateway
 
 ### In Progress
 
-- API Gateway routing for Order Service
+- Auth Service with JWT
 
 ### Next Steps
 
-- Add API Gateway routing for Order Service
 - Add Auth Service with JWT
 - Add structured logging
 - Add architecture diagram
@@ -167,6 +172,9 @@ npm run dev
 GET http://localhost:4000/health
 GET http://localhost:4000/api/products
 GET http://localhost:4000/api/products/1
+GET http://localhost:4000/api/orders/health
+POST http://localhost:4000/api/orders
+GET http://localhost:4000/api/orders/circuit-breaker/payment
 ```
 
 ### Product Service

@@ -118,6 +118,9 @@ Test:
 GET http://localhost:4000/health
 GET http://localhost:4000/api/products
 GET http://localhost:4000/api/products/1
+GET http://localhost:4000/api/orders/health
+POST http://localhost:4000/api/orders
+GET http://localhost:4000/api/orders/circuit-breaker/payment
 ```
 
 ---
@@ -167,6 +170,13 @@ POST http://localhost:4003/orders
 GET http://localhost:4003/circuit-breaker/payment
 ```
 
+Order Service can also be tested through API Gateway:
+
+```http
+GET http://localhost:4000/api/orders/health
+POST http://localhost:4000/api/orders
+GET http://localhost:4000/api/orders/circuit-breaker/payment
+
 ---
 
 ## Environment Variables
@@ -177,6 +187,7 @@ GET http://localhost:4003/circuit-breaker/payment
 PORT=4000
 SERVICE_NAME=api-gateway
 PRODUCT_SERVICE_URL=http://localhost:4001
+ORDER_SERVICE_URL=http://localhost:4003
 ```
 
 ### Product Service

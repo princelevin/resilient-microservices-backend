@@ -23,6 +23,8 @@ PostgreSQL
 
 Client
   ↓
+API Gateway
+  ↓
 Order Service
   ↓
 Payment Service
@@ -34,7 +36,7 @@ Payment Service
 
 | Service | Port | Responsibility |
 |---|---:|---|
-| API Gateway | 4000 | Routes client requests to backend services |
+| API Gateway | 4000 | Routes product and order requests to backend services |
 | Product Service | 4001 | Handles product APIs and product data |
 | Payment Service | 4002 | Simulates payment provider behavior |
 | Order Service | 4003 | Creates orders and calls Payment Service |
@@ -70,12 +72,14 @@ If data is missing in Redis, it reads from PostgreSQL and stores the result in R
 ```text
 Client
   ↓
+API Gateway
+  ↓
 Order Service
   ↓
 Payment Service
 ```
 
-The Order Service creates mock orders and calls the Payment Service.
+The client sends order requests to the API Gateway. The API Gateway forwards those requests to the Order Service, and the Order Service calls the Payment Service.
 
 The Payment Service can simulate:
 
@@ -130,7 +134,7 @@ Return controlled failure response
 
 Circuit breaker is implemented for Payment Service calls from the Order Service.
 
-Expected states:
+Implemented states:
 
 ```text
 CLOSED     → normal calls allowed
@@ -152,7 +156,9 @@ Completed:
 - Order Service
 - Timeout handling
 - Retry with exponential backoff
+- Circuit breaker behavior for Payment Service calls
+- API Gateway routing for Order Service
 
 In progress:
 
-- Circuit breaker behavior for Payment Service calls
+- Auth Service with JWT

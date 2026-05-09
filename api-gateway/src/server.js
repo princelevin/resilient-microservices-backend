@@ -17,7 +17,7 @@ app.use(morgan("dev"));
 
 // Add requestId to every request
 app.use((req, res, next) => {
-  req.requestId = uuidv4();
+  req.requestId = req.headers["x-request-id"] || uuidv4();
   res.setHeader("X-Request-Id", req.requestId);
   next();
 });
@@ -32,7 +32,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// Health check route
+// API Gateway health check
 app.get("/health", (req, res) => {
   res.json({
     service: SERVICE_NAME,
@@ -43,14 +43,18 @@ app.get("/health", (req, res) => {
   });
 });
 
+// Product Service - get all products
 app.get("/api/products", async (req, res) => {
   try {
-    const response = await axios.get(`${process.env.PRODUCT_SERVICE_URL}/products`, {
-      headers: {
-        "x-request-id": req.requestId,
-      },
-      timeout: 3000,
-    });
+    const response = await axios.get(
+      `${process.env.PRODUCT_SERVICE_URL}/products`,
+      {
+        headers: {
+          "x-request-id": req.requestId,
+        },
+        timeout: 3000,
+      }
+    );
 
     res.json({
       gateway: SERVICE_NAME,
@@ -68,6 +72,7 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
+// Product Service - get product by ID
 app.get("/api/products/:id", async (req, res) => {
   try {
     const response = await axios.get(
@@ -96,16 +101,96 @@ app.get("/api/products/:id", async (req, res) => {
   }
 });
 
-app.get("/api/orders", (req, res) => {
-  res.json({
-    message: "Order Service route will be connected here",
-    requestId: req.requestId,
-  });
+// Order Service - health check through API Gateway
+app.get("/api/orders/health", async (req, res) => {
+  try {
+    const response = await axios.get(`${process.env.ORDER_SERVICE_URL}/health`, {
+      headers: {
+        "x-request-id": req.requestId,
+      },
+      timeout: 3000,
+    });
+
+    res.json({
+      gateway: SERVICE_NAME,
+      routedTo: "order-service",
+      data: response.data,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    res.status(500).json({
+      gateway: SERVICE_NAME,
+      error: "Order Service health check failed",
+      details: error.message,
+      requestId: req.requestId,
+    });
+  }
+});
+
+// Order Service - create order through API Gateway
+app.post("/api/orders", async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${process.env.ORDER_SERVICE_URL}/orders`,
+      req.body,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-request-id": req.requestId,
+        },
+        timeout: 15000,
+      }
+    );
+
+    res.status(response.status).json({
+      gateway: SERVICE_NAME,
+      routedTo: "order-service",
+      data: response.data,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      gateway: SERVICE_NAME,
+      error: "Failed to create order",
+      details: error.response?.data || error.message,
+      requestId: req.requestId,
+    });
+  }
+});
+
+// Order Service - payment circuit breaker status through API Gateway
+app.get("/api/orders/circuit-breaker/payment", async (req, res) => {
+  try {
+    const response = await axios.get(
+      `${process.env.ORDER_SERVICE_URL}/circuit-breaker/payment`,
+      {
+        headers: {
+          "x-request-id": req.requestId,
+        },
+        timeout: 3000,
+      }
+    );
+
+    res.json({
+      gateway: SERVICE_NAME,
+      routedTo: "order-service",
+      data: response.data,
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    res.status(500).json({
+      gateway: SERVICE_NAME,
+      error: "Failed to fetch payment circuit breaker status",
+      details: error.message,
+      requestId: req.requestId,
+    });
+  }
 });
 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
+    gateway: SERVICE_NAME,
     error: "Route not found",
     path: req.originalUrl,
     requestId: req.requestId,

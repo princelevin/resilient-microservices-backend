@@ -26,6 +26,35 @@ GET /api/products
 GET /api/products/1
 ```
 
+### Order Service Health Through Gateway
+
+```http
+GET /api/orders/health
+```
+
+### Create Order Through Gateway
+
+```http
+POST /api/orders
+```
+
+Request body:
+
+```json
+{
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
+}
+```
+
+### Payment Circuit Breaker Status Through Gateway
+
+```http
+GET /api/orders/circuit-breaker/payment
+```
+
 ---
 
 ## Product Service
@@ -180,6 +209,8 @@ random
 Random mode can return either success or failure.
 
 ---
+
+> Order Service can be called directly on port `4003`, but the preferred client-facing path is through API Gateway using `/api/orders`.
 
 ## Order Service
 
