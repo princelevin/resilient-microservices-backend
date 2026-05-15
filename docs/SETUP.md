@@ -116,8 +116,15 @@ Test:
 
 ```http
 GET http://localhost:4000/health
+
 GET http://localhost:4000/api/products
 GET http://localhost:4000/api/products/1
+
+GET http://localhost:4000/api/auth/health
+POST http://localhost:4000/api/auth/register
+POST http://localhost:4000/api/auth/login
+GET http://localhost:4000/api/auth/verify
+
 GET http://localhost:4000/api/orders/health
 POST http://localhost:4000/api/orders
 GET http://localhost:4000/api/orders/circuit-breaker/payment
@@ -212,6 +219,86 @@ Authorization: Bearer <jwt-token>
 
 ---
 
+## Test Protected Order Flow
+
+### 1. Register through API Gateway
+
+```http
+POST http://localhost:4000/api/auth/register
+```
+
+Body:
+
+```json
+{
+  "name": "Prince Levin",
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+### 2. Login through API Gateway
+
+```http
+POST http://localhost:4000/api/auth/login
+```
+
+Body:
+
+```json
+{
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+Copy the token from the response.
+
+### 3. Create order without token
+
+```http
+POST http://localhost:4000/api/orders
+```
+
+Expected response:
+
+```text
+401 Unauthorized
+Authorization token is missing
+```
+
+### 4. Create order with token
+
+```http
+POST http://localhost:4000/api/orders
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+Body:
+
+```json
+{
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
+}
+```
+
+Expected result:
+
+```text
+Order created successfully
+orderStatus: CONFIRMED
+```
+
+---
+
 ## Environment Variables
 
 ### API Gateway
@@ -221,6 +308,7 @@ PORT=4000
 SERVICE_NAME=api-gateway
 PRODUCT_SERVICE_URL=http://localhost:4001
 ORDER_SERVICE_URL=http://localhost:4003
+AUTH_SERVICE_URL=http://localhost:4004
 ```
 
 ### Product Service

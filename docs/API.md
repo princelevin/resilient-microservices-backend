@@ -26,6 +26,55 @@ GET /api/products
 GET /api/products/1
 ```
 
+### Auth Service Health Through Gateway
+
+```http
+GET /api/auth/health
+```
+
+### Register User Through Gateway
+
+```http
+POST /api/auth/register
+```
+
+Request body:
+
+```json
+{
+  "name": "Prince Levin",
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+### Login User Through Gateway
+
+```http
+POST /api/auth/login
+```
+
+Request body:
+
+```json
+{
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+### Verify JWT Token Through Gateway
+
+```http
+GET /api/auth/verify
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
 ### Order Service Health Through Gateway
 
 ```http
@@ -36,6 +85,14 @@ GET /api/orders/health
 
 ```http
 POST /api/orders
+```
+
+This endpoint is protected and requires a JWT token.
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
 ```
 
 Request body:
@@ -49,13 +106,25 @@ Request body:
 }
 ```
 
+Sample response without token:
+
+```json
+{
+  "gateway": "api-gateway",
+  "status": "failed",
+  "message": "Authorization token is missing"
+}
+```
+
+Successful response includes the authenticated user and the order result.
+
 ### Payment Circuit Breaker Status Through Gateway
 
 ```http
 GET /api/orders/circuit-breaker/payment
 ```
 
-> Auth Service is currently called directly on port `4004`. In the next step, Auth routes will be added through API Gateway.
+> Auth Service can be called directly on port `4004`, but the preferred client-facing path is through API Gateway using `/api/auth`.
 
 ---
 

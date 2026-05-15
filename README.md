@@ -29,6 +29,8 @@ Payment Service
 
 Client
   ↓
+API Gateway
+  ↓
 Auth Service
   ↓
 JWT Token
@@ -41,6 +43,8 @@ The Order Service is accessed through the API Gateway and calls the Payment Serv
 Circuit breaker behavior is implemented to stop repeated calls to Payment Service when it is failing continuously.
 
 The Auth Service supports user registration, login, JWT token generation, and token verification.
+
+The API Gateway routes Auth Service requests and protects order creation by verifying JWT tokens before forwarding requests to the Order Service.
 
 ---
 
@@ -61,6 +65,9 @@ The Auth Service supports user registration, login, JWT token generation, and to
 - User registration and login
 - JWT token generation and verification
 - Password hashing using bcrypt
+- API Gateway routing for Auth Service APIs
+- JWT-protected order creation through API Gateway
+- Gateway-level token verification before forwarding protected requests
 
 ---
 
@@ -88,7 +95,7 @@ The Auth Service supports user registration, login, JWT token generation, and to
 
 | Service | Port | Responsibility |
 |---|---:|---|
-| API Gateway | 4000 | Routes product and order requests to backend services |
+| API Gateway | 4000 | Routes product, order, and auth requests to backend services |
 | Product Service | 4001 | Manages product APIs and product data |
 | Payment Service | 4002 | Simulates payment provider behavior |
 | Order Service | 4003 | Creates orders and calls Payment Service |
@@ -130,18 +137,24 @@ The Auth Service supports user registration, login, JWT token generation, and to
 - JWT token generation
 - JWT token verification endpoint
 - Password hashing with bcrypt
+- API Gateway routing for Auth Service
+- Auth registration through API Gateway
+- Auth login through API Gateway
+- Auth token verification through API Gateway
+- JWT-protected order creation through API Gateway
+- Unauthorized order creation blocked without token
 
 ### In Progress
 
-- API Gateway routing for Auth Service
+- Structured logging and observability cleanup
 
 ### Next Steps
 
-- Add API Gateway routing for Auth Service
-- Protect Order APIs using JWT
 - Add structured logging
+- Add centralized error response format
 - Add architecture diagram
 - Add full Docker Compose support for running all services together
+- Final README and documentation polish
 
 ---
 
@@ -201,11 +214,23 @@ npm run dev
 
 ```http
 GET http://localhost:4000/health
+
 GET http://localhost:4000/api/products
 GET http://localhost:4000/api/products/1
+
+GET http://localhost:4000/api/auth/health
+POST http://localhost:4000/api/auth/register
+POST http://localhost:4000/api/auth/login
+GET http://localhost:4000/api/auth/verify
+
 GET http://localhost:4000/api/orders/health
 POST http://localhost:4000/api/orders
 GET http://localhost:4000/api/orders/circuit-breaker/payment
+```
+`POST /api/orders` requires a valid JWT token in the Authorization header.
+
+```text
+Authorization: Bearer <jwt-token>
 ```
 
 ### Product Service
@@ -386,7 +411,7 @@ Generate JWT Token
 Verify JWT Token
 ```
 
-The JWT token will be used later to protect order creation APIs.
+The JWT token is used by the API Gateway to protect order creation APIs.
 
 ---
 

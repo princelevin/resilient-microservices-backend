@@ -31,6 +31,8 @@ Payment Service
 
 Client
   ↓
+API Gateway
+  ↓
 Auth Service
   ↓
 JWT Token
@@ -42,7 +44,7 @@ JWT Token
 
 | Service | Port | Responsibility |
 |---|---:|---|
-| API Gateway | 4000 | Routes product and order requests to backend services |
+| API Gateway | 4000 | Routes product, order, and auth requests to backend services |
 | Product Service | 4001 | Handles product APIs and product data |
 | Payment Service | 4002 | Simulates payment provider behavior |
 | Order Service | 4003 | Creates orders and calls Payment Service |
@@ -102,6 +104,8 @@ The Payment Service can simulate:
 ```text
 Client
   ↓
+API Gateway
+  ↓
 Auth Service
   ↓
 JWT Token
@@ -117,7 +121,7 @@ Current Auth Service behavior:
 - Generate JWT token
 - Verify JWT token
 
-The JWT token will later be used to protect order creation APIs.
+The JWT token is used by the API Gateway to protect order creation APIs.
 
 ---
 
@@ -189,7 +193,9 @@ Verify JWT Token
 
 The Auth Service uses JWT-based authentication.
 
-Currently, token verification is available through the Auth Service. In the next step, the token will be used to protect Order Service APIs through the API Gateway.
+JWT verification is used by the API Gateway to protect order creation APIs.
+
+Requests without a valid token are rejected before reaching the Order Service.
 
 ---
 
@@ -212,8 +218,10 @@ Completed:
 - User login
 - JWT token generation
 - JWT token verification
+- API Gateway routing for Auth Service
+- JWT-protected order creation
+- Unauthorized order requests blocked without token
 
 In progress:
 
-- API Gateway routing for Auth Service
-- JWT protection for order APIs
+- Structured logging and observability cleanup
