@@ -2,7 +2,7 @@
 
 A backend engineering project that demonstrates how microservices behave when services become slow, fail, retry, depend on databases, or use caches.
 
-This project focuses on practical backend reliability patterns used in production systems, including API Gateway routing, PostgreSQL integration, Redis caching, timeout handling, retry with exponential backoff, and circuit breaker behavior.
+This project focuses on practical backend reliability patterns used in production systems, including API Gateway routing, PostgreSQL integration, Redis caching, timeout handling, retry with exponential backoff, circuit breaker behavior, JWT authentication, request tracing, and structured logging.
 
 ---
 
@@ -46,6 +46,8 @@ The Auth Service supports user registration, login, JWT token generation, and to
 
 The API Gateway routes Auth Service requests and protects order creation by verifying JWT tokens before forwarding requests to the Order Service.
 
+Structured JSON logging is implemented across services to capture request IDs, service names, request paths, status codes, and request duration for easier debugging across microservices.
+
 ---
 
 ## Features
@@ -68,6 +70,9 @@ The API Gateway routes Auth Service requests and protects order creation by veri
 - API Gateway routing for Auth Service APIs
 - JWT-protected order creation through API Gateway
 - Gateway-level token verification before forwarding protected requests
+- Structured JSON logging across services
+- Request duration tracking
+- Consistent requestId-based observability across API Gateway and backend services
 
 ---
 
@@ -88,6 +93,7 @@ The API Gateway routes Auth Service requests and protects order creation by veri
 - JWT
 - bcryptjs
 - jsonwebtoken
+- Structured JSON Logging
 
 ---
 
@@ -143,18 +149,21 @@ The API Gateway routes Auth Service requests and protects order creation by veri
 - Auth token verification through API Gateway
 - JWT-protected order creation through API Gateway
 - Unauthorized order creation blocked without token
+- Structured JSON logging across services
+- Request duration tracking
+- Request ID based tracing across API Gateway, Product Service, Auth Service, Order Service, and Payment Service
 
 ### In Progress
 
-- Structured logging and observability cleanup
+- Full Docker Compose support for running all services together
 
 ### Next Steps
 
-- Add structured logging
+- Add full Docker Compose support for running all services together
 - Add centralized error response format
 - Add architecture diagram
-- Add full Docker Compose support for running all services together
 - Final README and documentation polish
+- Prepare final GitHub and LinkedIn project summary
 
 ---
 
@@ -413,6 +422,25 @@ Verify JWT Token
 
 The JWT token is used by the API Gateway to protect order creation APIs.
 
+### Structured Logging and Request Tracing
+
+Each service logs requests in structured JSON format.
+
+```json
+{
+  "level": "info",
+  "message": "Request completed",
+  "service": "api-gateway",
+  "requestId": "example-request-id",
+  "method": "POST",
+  "path": "/api/orders",
+  "statusCode": 201,
+  "durationMs": 123
+}
+```
+
+The same `requestId` is forwarded across services, making it easier to trace one request across API Gateway, Product Service, Auth Service, Order Service, and Payment Service.
+
 ---
 
 ## Project Structure
@@ -422,6 +450,8 @@ resilient-microservices-backend
 │
 ├── api-gateway
 │   ├── src
+│   │   ├── utils
+│   │   │   └── logger.js
 │   │   └── server.js
 │   ├── package.json
 │   ├── package-lock.json
@@ -433,6 +463,8 @@ resilient-microservices-backend
 │   │   │   ├── pool.js
 │   │   │   ├── redis.js
 │   │   │   └── init.sql
+│   │   ├── utils
+│   │   │   └── logger.js
 │   │   └── server.js
 │   ├── package.json
 │   ├── package-lock.json
@@ -440,6 +472,8 @@ resilient-microservices-backend
 │
 ├── payment-service
 │   ├── src
+│   │   ├── utils
+│   │   │   └── logger.js
 │   │   └── server.js
 │   ├── package.json
 │   ├── package-lock.json
@@ -451,6 +485,8 @@ resilient-microservices-backend
 │   │   │   └── paymentClient.js
 │   │   ├── resilience
 │   │   │   └── circuitBreaker.js
+│   │   ├── utils
+│   │   │   └── logger.js
 │   │   └── server.js
 │   ├── package.json
 │   ├── package-lock.json
@@ -460,6 +496,8 @@ resilient-microservices-backend
 │   ├── src
 │   │   ├── middleware
 │   │   │   └── authMiddleware.js
+│   │   ├── utils
+│   │   │   └── logger.js
 │   │   └── server.js
 │   ├── package.json
 │   ├── package-lock.json

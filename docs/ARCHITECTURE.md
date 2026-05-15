@@ -4,7 +4,7 @@
 
 This project is a microservices-based backend system built to understand production-style backend reliability patterns.
 
-The system demonstrates how services communicate, fail, retry, cache data, and protect themselves from slow or unstable dependencies.
+The system demonstrates how services communicate, fail, retry, cache data, protect themselves from slow or unstable dependencies, and expose structured logs for request tracing across services.
 
 ---
 
@@ -36,6 +36,12 @@ API Gateway
 Auth Service
   ↓
 JWT Token
+
+All Services
+  ↓
+Structured JSON Logs
+  ↓
+RequestId-based Tracing
 ```
 
 ---
@@ -125,6 +131,48 @@ The JWT token is used by the API Gateway to protect order creation APIs.
 
 ---
 
+## Observability Flow
+
+```text
+Client Request
+  ↓
+API Gateway generates or forwards requestId
+  ↓
+Request moves across backend services
+  ↓
+Each service logs request details in JSON format
+  ↓
+Same requestId helps trace the request across services
+```
+
+Each service logs structured request information such as:
+
+- Service name
+- Request ID
+- HTTP method
+- Request path
+- Status code
+- Request duration in milliseconds
+
+Example structured log:
+
+```json
+{
+  "level": "info",
+  "message": "Request completed",
+  "service": "api-gateway",
+  "requestId": "example-request-id",
+  "method": "POST",
+  "path": "/api/orders",
+  "statusCode": 201,
+  "durationMs": 123
+}
+```
+
+This helps debug requests across API Gateway, Product Service, Auth Service, Order Service, and Payment Service.
+
+---
+
 ## Reliability Patterns
 
 ### Cache-Aside Pattern
@@ -197,6 +245,31 @@ JWT verification is used by the API Gateway to protect order creation APIs.
 
 Requests without a valid token are rejected before reaching the Order Service.
 
+### Structured Logging and Request Tracing
+
+```text
+Request starts
+  ↓
+requestId is created or forwarded
+  ↓
+Service processes request
+  ↓
+Structured JSON log is written
+  ↓
+requestId is used to trace the same request across services
+```
+
+Structured logging is implemented across the API Gateway, Product Service, Auth Service, Order Service, and Payment Service.
+
+Each request log includes:
+
+- `service`
+- `requestId`
+- `method`
+- `path`
+- `statusCode`
+- `durationMs`
+
 ---
 
 ## Current Implementation Status
@@ -221,7 +294,10 @@ Completed:
 - API Gateway routing for Auth Service
 - JWT-protected order creation
 - Unauthorized order requests blocked without token
+- Structured JSON logging across services
+- Request duration tracking
+- Request ID based tracing across API Gateway, Product Service, Auth Service, Order Service, and Payment Service
 
 In progress:
 
-- Structured logging and observability cleanup
+- Full Docker Compose support for running all services together

@@ -4,6 +4,7 @@ const morgan = require("morgan");
 const { v4: uuidv4 } = require("uuid");
 const pool = require("./db/pool");
 const { redisClient, connectRedis } = require("./db/redis");
+const { logInfo, requestLogger } = require("./utils/logger");
 require("dotenv").config();
 
 const app = express();
@@ -21,6 +22,8 @@ app.use((req, res, next) => {
   res.setHeader("X-Request-Id", req.requestId);
   next();
 });
+
+app.use(requestLogger(SERVICE_NAME));
 
 app.get("/", (req, res) => {
   res.json({
@@ -224,7 +227,10 @@ async function startServer() {
     console.log("Redis connected successfully");
 
     app.listen(PORT, () => {
-      console.log(`${SERVICE_NAME} running on port ${PORT}`);
+      logInfo("Service started", {
+        service: SERVICE_NAME,
+        port: PORT,
+      });
     });
   } catch (error) {
     console.error("Failed to start service:", error.message);

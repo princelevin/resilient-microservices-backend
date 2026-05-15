@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const authMiddleware = require("./middleware/authMiddleware");
+const { logInfo, requestLogger } = require("./utils/logger");
 require("dotenv").config();
 
 const app = express();
@@ -27,6 +28,8 @@ app.use((req, res, next) => {
   res.setHeader("X-Request-Id", req.requestId);
   next();
 });
+
+app.use(requestLogger(SERVICE_NAME));
 
 app.get("/", (req, res) => {
   res.json({
@@ -200,5 +203,8 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`${SERVICE_NAME} running on port ${PORT}`);
+  logInfo("Service started", {
+    service: SERVICE_NAME,
+    port: PORT,
+  });
 });

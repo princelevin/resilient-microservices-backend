@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const { v4: uuidv4 } = require("uuid");
+const { logInfo, logError, requestLogger } = require("./utils/logger");
 require("dotenv").config();
 
 const app = express();
@@ -24,6 +25,8 @@ app.use((req, res, next) => {
   res.setHeader("X-Request-Id", req.requestId);
   next();
 });
+
+app.use(requestLogger(SERVICE_NAME));
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -351,5 +354,8 @@ app.use((req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`${SERVICE_NAME} running on port ${PORT}`);
+  logInfo("Service started", {
+    service: SERVICE_NAME,
+    port: PORT,
+  });
 });

@@ -1,5 +1,28 @@
 # API Documentation
 
+## Request Tracing and Logging
+
+All services return a `requestId` in the API response.
+
+The same `requestId` is forwarded across API Gateway and backend services, making it easier to trace one request across multiple services.
+
+Each service also logs requests in structured JSON format with details such as:
+
+```json
+{
+  "level": "info",
+  "message": "Request completed",
+  "service": "api-gateway",
+  "requestId": "example-request-id",
+  "method": "POST",
+  "path": "/api/orders",
+  "statusCode": 201,
+  "durationMs": 123
+}
+```
+
+---
+
 ## API Gateway
 
 Base URL:
@@ -7,6 +30,8 @@ Base URL:
 ```text
 http://localhost:4000
 ```
+
+The API Gateway creates or forwards an `X-Request-Id` header for request tracing.
 
 ### Health Check
 
@@ -116,7 +141,7 @@ Sample response without token:
 }
 ```
 
-Successful response includes the authenticated user and the order result.
+Successful response includes the authenticated user, the order result, and a `requestId` for tracing the request across API Gateway, Auth Service, Order Service, and Payment Service.
 
 ### Payment Circuit Breaker Status Through Gateway
 

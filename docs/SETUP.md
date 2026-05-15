@@ -11,6 +11,38 @@ Install:
 
 ---
 
+## Logging and Request Tracing
+
+All services use structured JSON logs.
+
+Each request log includes:
+
+- service name
+- request ID
+- HTTP method
+- request path
+- status code
+- request duration in milliseconds
+
+Example log:
+
+```json
+{
+  "level": "info",
+  "message": "Request completed",
+  "service": "api-gateway",
+  "requestId": "example-request-id",
+  "method": "POST",
+  "path": "/api/orders",
+  "statusCode": 201,
+  "durationMs": 123
+}
+```
+
+The same `requestId` is forwarded across services to help trace requests.
+
+---
+
 ## Start PostgreSQL and Redis
 
 From the project root:
@@ -130,6 +162,19 @@ POST http://localhost:4000/api/orders
 GET http://localhost:4000/api/orders/circuit-breaker/payment
 ```
 
+After each request, check the API Gateway terminal for structured JSON logs.
+
+Expected log fields:
+
+```text
+service
+requestId
+method
+path
+statusCode
+durationMs
+```
+
 ---
 
 ## Run Payment Service
@@ -184,6 +229,10 @@ GET http://localhost:4000/api/orders/health
 POST http://localhost:4000/api/orders
 GET http://localhost:4000/api/orders/circuit-breaker/payment
 ```
+
+Note: `POST http://localhost:4000/api/orders` requires a valid JWT token.
+
+Check API Gateway, Auth Service, Order Service, and Payment Service terminals to trace the request using the same `requestId`.
 
 ---
 
@@ -296,6 +345,108 @@ Expected result:
 Order created successfully
 orderStatus: CONFIRMED
 ```
+
+---
+
+## Test Structured Logging
+
+### 1. Test API Gateway logging
+
+```http
+GET http://localhost:4000/health
+```
+
+Check the API Gateway terminal.
+
+Expected log should include:
+
+```text
+service
+requestId
+method
+path
+statusCode
+durationMs
+```
+
+---
+
+### 2. Test Product Service tracing
+
+```http
+GET http://localhost:4000/api/products
+```
+
+Check both terminals:
+
+```text
+API Gateway terminal
+Product Service terminal
+```
+
+Both logs should contain the same `requestId`.
+
+---
+
+### 3. Test Auth Service tracing
+
+```http
+POST http://localhost:4000/api/auth/login
+```
+
+Body:
+
+```json
+{
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+Check both terminals:
+
+```text
+API Gateway terminal
+Auth Service terminal
+```
+
+Both logs should contain the same `requestId`.
+
+---
+
+### 4. Test protected order tracing
+
+```http
+POST http://localhost:4000/api/orders
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+Body:
+
+```json
+{
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
+}
+```
+
+Check these terminals:
+
+```text
+API Gateway terminal
+Auth Service terminal
+Order Service terminal
+Payment Service terminal
+```
+
+The same `requestId` should appear across the request flow.
 
 ---
 
