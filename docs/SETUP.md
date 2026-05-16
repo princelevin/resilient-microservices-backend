@@ -1,13 +1,343 @@
 # Setup Guide
 
+This guide explains how to run the Resilient Microservices Backend System locally using Docker Compose.
+
+The recommended setup is Docker Compose because it starts all services, PostgreSQL, and Redis together.
+
+---
+
 ## Prerequisites
 
 Install:
 
+- Docker Desktop
 - Node.js
 - npm
-- Docker Desktop
-- PostgreSQL client tools
+
+Make sure Docker Desktop is running before starting the system.
+
+---
+
+## Run the Full System
+
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+To run in detached mode:
+
+```bash
+docker compose up --build -d
+```
+
+Check running containers:
+
+```bash
+docker ps
+```
+
+Expected containers:
+
+```text
+api-gateway
+product-service
+payment-service
+order-service
+auth-service
+resilient-postgres
+resilient-redis
+```
+
+Stop the system:
+
+```bash
+docker compose down
+```
+
+Reset PostgreSQL and Redis volumes:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+Use this when you want PostgreSQL to re-run the initial SQL script.
+
+---
+
+## Service URLs
+
+| Service | URL |
+|---|---|
+| API Gateway | `http://localhost:4000` |
+| Product Service | `http://localhost:4001` |
+| Payment Service | `http://localhost:4002` |
+| Order Service | `http://localhost:4003` |
+| Auth Service | `http://localhost:4004` |
+| PostgreSQL | `localhost:5432` |
+| Redis | `localhost:6379` |
+
+The preferred client-facing entry point is the API Gateway:
+
+```text
+http://localhost:4000
+```
+
+---
+
+## Docker Compose Service Communication
+
+Inside Docker Compose, services communicate using container service names instead of `localhost`.
+
+Examples:
+
+```text
+API Gateway → http://product-service:4001
+API Gateway → http://auth-service:4004
+API Gateway → http://order-service:4003
+Order Service → http://payment-service:4002
+Product Service → postgres:5432
+Product Service → redis:6379
+```
+
+---
+
+## Test API Gateway
+
+```http
+GET http://localhost:4000/health
+```
+
+Expected result:
+
+```text
+API Gateway should return healthy status.
+```
+
+---
+
+## Test Product Flow
+
+```http
+GET http://localhost:4000/api/products
+```
+
+Expected result:
+
+```text
+API Gateway routes request to Product Service.
+Product Service reads from Redis or PostgreSQL.
+```
+
+Send the same request again to verify cache behavior:
+
+```text
+First request  → cache MISS
+Second request → cache HIT
+```
+
+---
+
+## Test Auth Flow
+
+### Register User
+
+```http
+POST http://localhost:4000/api/auth/register
+```
+
+Body:
+
+```json
+{
+  "name": "Prince Levin",
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+### Login User
+
+```http
+POST http://localhost:4000/api/auth/login
+```
+
+Body:
+
+```json
+{
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+Copy the JWT token from:
+
+```text
+data.token
+```
+
+### Verify Token
+
+```http
+GET http://localhost:4000/api/auth/verify
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+---
+
+## Test Protected Order Flow
+
+### Create Order Without Token
+
+```http
+POST http://localhost:4000/api/orders
+```
+
+Body:
+
+```json
+{
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
+}
+```
+
+Expected result:
+
+```text
+401 Unauthorized
+Authorization token is missing
+```
+
+### Create Order With Token
+
+```http
+POST http://localhost:4000/api/orders
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+Body:
+
+```json
+{
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
+}
+```
+
+Expected result:
+
+```text
+orderStatus: CONFIRMED
+```
+
+---
+
+## Test Payment Failure Flow
+
+```http
+POST http://localhost:4000/api/orders
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+Body:
+
+```json
+{
+  "productId": 2,
+  "quantity": 1,
+  "amount": 899,
+  "paymentMode": "failure"
+}
+```
+
+Expected result:
+
+```text
+orderStatus: PAYMENT_FAILED
+```
+
+---
+
+## Test Circuit Breaker Status
+
+```http
+GET http://localhost:4000/api/orders/circuit-breaker/payment
+```
+
+Expected result:
+
+```text
+Circuit breaker status should be returned from Order Service.
+```
+
+Possible states:
+
+```text
+CLOSED
+OPEN
+HALF_OPEN
+```
+
+---
+
+## Test Redis
+
+Check Redis container:
+
+```bash
+docker exec -it resilient-redis redis-cli ping
+```
+
+Expected output:
+
+```text
+PONG
+```
+
+---
+
+## Test PostgreSQL
+
+Open PostgreSQL inside the container:
+
+```bash
+docker exec -it resilient-postgres psql -U postgres -d resilient_microservices
+```
+
+Check products:
+
+```sql
+SELECT * FROM products;
+```
+
+Exit:
+
+```sql
+\q
+```
 
 ---
 
@@ -41,425 +371,29 @@ Example log:
 
 The same `requestId` is forwarded across services to help trace requests.
 
----
-
-## Start PostgreSQL and Redis
-
-From the project root:
-
-```bash
-docker compose up -d
-```
-
-Check containers:
-
-```bash
-docker ps
-```
-
-Expected containers:
+For a protected order request, check logs in:
 
 ```text
-resilient-postgres
-resilient-redis
-```
-
-Test Redis:
-
-```bash
-docker exec -it resilient-redis redis-cli ping
-```
-
-Expected output:
-
-```text
-PONG
-```
-
----
-
-## Initialize PostgreSQL Data
-
-Run:
-
-```bash
-psql -d resilient_microservices -f product-service/src/db/init.sql
-```
-
-Verify:
-
-```bash
-psql -d resilient_microservices
-```
-
-Inside PostgreSQL:
-
-```sql
-SELECT * FROM products;
-```
-
-Exit:
-
-```sql
-\q
-```
-
----
-
-## Run Product Service
-
-```bash
-cd product-service
-npm install
-npm run dev
-```
-
-Runs on:
-
-```text
-http://localhost:4001
-```
-
-Test:
-
-```http
-GET http://localhost:4001/health
-GET http://localhost:4001/products
-GET http://localhost:4001/products/1
-```
-
----
-
-## Run API Gateway
-
-```bash
-cd api-gateway
-npm install
-npm run dev
-```
-
-Runs on:
-
-```text
-http://localhost:4000
-```
-
-Test:
-
-```http
-GET http://localhost:4000/health
-
-GET http://localhost:4000/api/products
-GET http://localhost:4000/api/products/1
-
-GET http://localhost:4000/api/auth/health
-POST http://localhost:4000/api/auth/register
-POST http://localhost:4000/api/auth/login
-GET http://localhost:4000/api/auth/verify
-
-GET http://localhost:4000/api/orders/health
-POST http://localhost:4000/api/orders
-GET http://localhost:4000/api/orders/circuit-breaker/payment
-```
-
-After each request, check the API Gateway terminal for structured JSON logs.
-
-Expected log fields:
-
-```text
-service
-requestId
-method
-path
-statusCode
-durationMs
-```
-
----
-
-## Run Payment Service
-
-```bash
-cd payment-service
-npm install
-npm run dev
-```
-
-Runs on:
-
-```text
-http://localhost:4002
-```
-
-Test:
-
-```http
-GET http://localhost:4002/health
-POST http://localhost:4002/payments
-```
-
----
-
-## Run Order Service
-
-```bash
-cd order-service
-npm install
-npm run dev
-```
-
-Runs on:
-
-```text
-http://localhost:4003
-```
-
-Test:
-
-```http
-GET http://localhost:4003/health
-POST http://localhost:4003/orders
-GET http://localhost:4003/circuit-breaker/payment
-```
-
-Order Service can also be tested through API Gateway:
-
-```http
-GET http://localhost:4000/api/orders/health
-POST http://localhost:4000/api/orders
-GET http://localhost:4000/api/orders/circuit-breaker/payment
-```
-
-Note: `POST http://localhost:4000/api/orders` requires a valid JWT token.
-
-Check API Gateway, Auth Service, Order Service, and Payment Service terminals to trace the request using the same `requestId`.
-
----
-
-## Run Auth Service
-
-```bash
-cd auth-service
-npm install
-npm run dev
-```
-
-Runs on:
-
-```text
-http://localhost:4004
-```
-
-Test:
-
-```http
-GET http://localhost:4004/health
-POST http://localhost:4004/auth/register
-POST http://localhost:4004/auth/login
-GET http://localhost:4004/auth/verify
-GET http://localhost:4004/auth/users
-```
-
-For token verification, add this header:
-
-```text
-Authorization: Bearer <jwt-token>
-```
-
----
-
-## Test Protected Order Flow
-
-### 1. Register through API Gateway
-
-```http
-POST http://localhost:4000/api/auth/register
-```
-
-Body:
-
-```json
-{
-  "name": "Prince Levin",
-  "email": "prince@example.com",
-  "password": "Password@123"
-}
-```
-
-### 2. Login through API Gateway
-
-```http
-POST http://localhost:4000/api/auth/login
-```
-
-Body:
-
-```json
-{
-  "email": "prince@example.com",
-  "password": "Password@123"
-}
-```
-
-Copy the token from the response.
-
-### 3. Create order without token
-
-```http
-POST http://localhost:4000/api/orders
-```
-
-Expected response:
-
-```text
-401 Unauthorized
-Authorization token is missing
-```
-
-### 4. Create order with token
-
-```http
-POST http://localhost:4000/api/orders
-```
-
-Header:
-
-```text
-Authorization: Bearer <jwt-token>
-```
-
-Body:
-
-```json
-{
-  "productId": 1,
-  "quantity": 1,
-  "amount": 1299,
-  "paymentMode": "success"
-}
-```
-
-Expected result:
-
-```text
-Order created successfully
-orderStatus: CONFIRMED
-```
-
----
-
-## Test Structured Logging
-
-### 1. Test API Gateway logging
-
-```http
-GET http://localhost:4000/health
-```
-
-Check the API Gateway terminal.
-
-Expected log should include:
-
-```text
-service
-requestId
-method
-path
-statusCode
-durationMs
-```
-
----
-
-### 2. Test Product Service tracing
-
-```http
-GET http://localhost:4000/api/products
-```
-
-Check both terminals:
-
-```text
-API Gateway terminal
-Product Service terminal
-```
-
-Both logs should contain the same `requestId`.
-
----
-
-### 3. Test Auth Service tracing
-
-```http
-POST http://localhost:4000/api/auth/login
-```
-
-Body:
-
-```json
-{
-  "email": "prince@example.com",
-  "password": "Password@123"
-}
-```
-
-Check both terminals:
-
-```text
-API Gateway terminal
-Auth Service terminal
-```
-
-Both logs should contain the same `requestId`.
-
----
-
-### 4. Test protected order tracing
-
-```http
-POST http://localhost:4000/api/orders
-```
-
-Header:
-
-```text
-Authorization: Bearer <jwt-token>
-```
-
-Body:
-
-```json
-{
-  "productId": 1,
-  "quantity": 1,
-  "amount": 1299,
-  "paymentMode": "success"
-}
-```
-
-Check these terminals:
-
-```text
-API Gateway terminal
-Auth Service terminal
-Order Service terminal
-Payment Service terminal
+API Gateway
+Auth Service
+Order Service
+Payment Service
 ```
 
 The same `requestId` should appear across the request flow.
 
 ---
 
-## Environment Variables
+## Environment Variables Used by Docker Compose
 
 ### API Gateway
 
 ```env
 PORT=4000
 SERVICE_NAME=api-gateway
-PRODUCT_SERVICE_URL=http://localhost:4001
-ORDER_SERVICE_URL=http://localhost:4003
-AUTH_SERVICE_URL=http://localhost:4004
+PRODUCT_SERVICE_URL=http://product-service:4001
+ORDER_SERVICE_URL=http://order-service:4003
+AUTH_SERVICE_URL=http://auth-service:4004
 ```
 
 ### Product Service
@@ -467,14 +401,12 @@ AUTH_SERVICE_URL=http://localhost:4004
 ```env
 PORT=4001
 SERVICE_NAME=product-service
-
-DB_HOST=localhost
+DB_HOST=postgres
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_NAME=resilient_microservices
-
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://redis:6379
 CACHE_TTL_SECONDS=60
 ```
 
@@ -490,7 +422,7 @@ SERVICE_NAME=payment-service
 ```env
 PORT=4003
 SERVICE_NAME=order-service
-PAYMENT_SERVICE_URL=http://localhost:4002
+PAYMENT_SERVICE_URL=http://payment-service:4002
 PAYMENT_TIMEOUT_MS=2000
 PAYMENT_MAX_RETRIES=3
 CIRCUIT_BREAKER_FAILURE_THRESHOLD=3
@@ -505,3 +437,71 @@ SERVICE_NAME=auth-service
 JWT_SECRET=super-secret-jwt-key-change-later
 JWT_EXPIRES_IN=1h
 ```
+
+---
+
+## Common Troubleshooting
+
+### Docker daemon is not running
+
+Start Docker Desktop and run:
+
+```bash
+docker ps
+```
+
+### Products table is missing
+
+Reset volumes and rebuild:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+### Redis connection error
+
+Check Redis:
+
+```bash
+docker exec -it resilient-redis redis-cli ping
+```
+
+Expected:
+
+```text
+PONG
+```
+
+### JWT token expired
+
+Login again and use a fresh token:
+
+```http
+POST http://localhost:4000/api/auth/login
+```
+
+---
+
+## Manual Local Development
+
+Docker Compose is the recommended setup.
+
+For manual development, each service can still be run separately:
+
+```bash
+cd api-gateway
+npm install
+npm run dev
+```
+
+Repeat the same process for:
+
+```text
+product-service
+payment-service
+order-service
+auth-service
+```
+
+When running manually, use `localhost` URLs in each service `.env` file.

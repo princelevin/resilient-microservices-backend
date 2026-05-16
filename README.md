@@ -1,78 +1,102 @@
 # Resilient Microservices Backend System
 
-A backend engineering project that demonstrates how microservices behave when services become slow, fail, retry, depend on databases, or use caches.
+A production-style backend engineering project that demonstrates how distributed microservices handle routing, authentication, caching, service failures, retries, circuit breaking, and request tracing.
 
-This project focuses on practical backend reliability patterns used in production systems, including API Gateway routing, PostgreSQL integration, Redis caching, timeout handling, retry with exponential backoff, circuit breaker behavior, JWT authentication, request tracing, and structured logging.
+The system is built with Node.js, Express.js, PostgreSQL, Redis, Docker Compose, JWT authentication, and structured JSON logging.
 
 ---
 
-## Architecture Overview
+## Overview
+
+This project simulates a real-world microservices backend where multiple services communicate through an API Gateway.
+
+It demonstrates backend reliability and observability patterns such as:
+
+- API Gateway based routing
+- JWT authentication and protected APIs
+- PostgreSQL-backed product data
+- Redis cache-aside pattern
+- Timeout handling
+- Retry with exponential backoff
+- Circuit breaker pattern
+- Request ID propagation across services
+- Structured JSON logging
+- Docker Compose based local orchestration
+
+---
+
+## Architecture
 
 ```text
 Client
   ↓
 API Gateway
-  ↓
-Product Service
-  ↓
-Redis Cache
-  ↓
-PostgreSQL
-
-Client
-  ↓
-API Gateway
-  ↓
-Order Service
-  ↓
-Payment Service
-
-Client
-  ↓
-API Gateway
-  ↓
-Auth Service
-  ↓
-JWT Token
+  ├── Product Service → Redis → PostgreSQL
+  ├── Auth Service → JWT Token
+  └── Order Service → Payment Service
 ```
 
-The Product Service is accessed through the API Gateway.
+The API Gateway is the main entry point for client requests.
 
-The Order Service is accessed through the API Gateway and calls the Payment Service while handling downstream payment failures using timeout, retry, exponential backoff, and circuit breaker logic.
-
-Circuit breaker behavior is implemented to stop repeated calls to Payment Service when it is failing continuously.
-
-The Auth Service supports user registration, login, JWT token generation, and token verification.
-
-The API Gateway routes Auth Service requests and protects order creation by verifying JWT tokens before forwarding requests to the Order Service.
-
-Structured JSON logging is implemented across services to capture request IDs, service names, request paths, status codes, and request duration for easier debugging across microservices.
+Product APIs are routed to the Product Service.  
+Auth APIs are routed to the Auth Service.  
+Order APIs are protected using JWT and routed to the Order Service.  
+The Order Service calls the Payment Service and handles payment failures using timeout, retry, and circuit breaker logic.
 
 ---
 
-## Features
+## Services
 
-- API Gateway as the entry point for product APIs
-- Product Service with PostgreSQL-backed product data
-- Redis cache-aside pattern for product reads
-- Payment Mock Service with success, failure, slow, and random behavior
-- Order Service calling Payment Service
-- Timeout handling for slow downstream services
+| Service | Port | Responsibility |
+|---|---:|---|
+| API Gateway | 4000 | Routes product, auth, and order requests |
+| Product Service | 4001 | Serves product data using PostgreSQL and Redis |
+| Payment Service | 4002 | Simulates payment success, failure, slow, and random behavior |
+| Order Service | 4003 | Creates orders and calls Payment Service |
+| Auth Service | 4004 | Handles registration, login, JWT generation, and token verification |
+| PostgreSQL | 5432 | Stores product data |
+| Redis | 6379 | Caches product reads |
+
+---
+
+## Key Features
+
+### API Gateway
+
+- Single entry point for clients
+- Routes requests to Product, Auth, and Order services
+- Protects order creation using JWT verification
+- Forwards request IDs to downstream services
+
+### Product Service
+
+- PostgreSQL-backed product APIs
+- Redis cache-aside implementation
+- Cache HIT / MISS behavior
+- Product lookup by ID
+
+### Auth Service
+
+- User registration
+- Password hashing with bcrypt
+- User login
+- JWT token generation
+- JWT token verification
+
+### Order and Payment Flow
+
+- JWT-protected order creation
+- Payment Service integration
+- Timeout handling for slow downstream calls
 - Retry with exponential backoff
-- Circuit breaker pattern for Payment Service calls
-- Request ID tracing across services
-- Docker-based PostgreSQL and Redis setup
-- API Gateway routing for Order Service APIs
-- Auth Service with JWT-based authentication
-- User registration and login
-- JWT token generation and verification
-- Password hashing using bcrypt
-- API Gateway routing for Auth Service APIs
-- JWT-protected order creation through API Gateway
-- Gateway-level token verification before forwarding protected requests
+- Circuit breaker to stop repeated failing payment calls
+
+### Observability
+
 - Structured JSON logging across services
 - Request duration tracking
-- Consistent requestId-based observability across API Gateway and backend services
+- Shared `requestId` across API Gateway and backend services
+- Easier tracing of one request across multiple services
 
 ---
 
@@ -84,208 +108,132 @@ Structured JSON logging is implemented across services to capture request IDs, s
 - PostgreSQL
 - Redis
 - Docker
+- Docker Compose
+- JWT
+- bcryptjs
 - Axios
 - Morgan
 - dotenv
 - UUID
-- pg
-- redis
-- JWT
-- bcryptjs
-- jsonwebtoken
 - Structured JSON Logging
 
 ---
 
-## Services
+## Run Locally with Docker Compose
 
-| Service | Port | Responsibility |
-|---|---:|---|
-| API Gateway | 4000 | Routes product, order, and auth requests to backend services |
-| Product Service | 4001 | Manages product APIs and product data |
-| Payment Service | 4002 | Simulates payment provider behavior |
-| Order Service | 4003 | Creates orders and calls Payment Service |
-| Auth Service | 4004 | Handles user registration, login, and JWT verification |
-| PostgreSQL | 5432 | Stores product data |
-| Redis | 6379 | Caches product reads |
-
----
-
-## Current Status
-
-### Completed
-
-- API Gateway setup
-- Product Service setup
-- API Gateway to Product Service routing
-- PostgreSQL integration for product data
-- Redis caching for product reads
-- Cache HIT/MISS handling
-- Payment Mock Service
-- Payment success, failure, slow, and random simulation
-- Order Service setup
-- Order creation endpoint
-- Payment Service client
-- Timeout handling
-- Retry with exponential backoff
-- Controlled payment failure response
-- Request ID tracing
-- Circuit breaker pattern for Payment Service calls
-- Circuit OPEN state for repeated payment failures
-- Circuit HALF_OPEN recovery after cooldown
-- Circuit CLOSED state after successful recovery
-- API Gateway routing for Order Service
-- Order creation through API Gateway
-- Circuit breaker status access through API Gateway
-- Auth Service setup
-- User registration endpoint
-- User login endpoint
-- JWT token generation
-- JWT token verification endpoint
-- Password hashing with bcrypt
-- API Gateway routing for Auth Service
-- Auth registration through API Gateway
-- Auth login through API Gateway
-- Auth token verification through API Gateway
-- JWT-protected order creation through API Gateway
-- Unauthorized order creation blocked without token
-- Structured JSON logging across services
-- Request duration tracking
-- Request ID based tracing across API Gateway, Product Service, Auth Service, Order Service, and Payment Service
-
-### In Progress
-
-- Full Docker Compose support for running all services together
-
-### Next Steps
-
-- Add full Docker Compose support for running all services together
-- Add centralized error response format
-- Add architecture diagram
-- Final README and documentation polish
-- Prepare final GitHub and LinkedIn project summary
-
----
-
-## Quick Start
-
-Start PostgreSQL and Redis:
+Start the full system:
 
 ```bash
-docker compose up -d
+docker compose up --build
 ```
 
-Run Product Service:
+Run in detached mode:
 
 ```bash
-cd product-service
-npm install
-npm run dev
+docker compose up --build -d
 ```
 
-Run API Gateway:
+Check running containers:
 
 ```bash
-cd api-gateway
-npm install
-npm run dev
+docker ps
 ```
 
-Run Payment Service:
+Expected containers:
 
-```bash
-cd payment-service
-npm install
-npm run dev
+```text
+api-gateway
+product-service
+payment-service
+order-service
+auth-service
+resilient-postgres
+resilient-redis
 ```
 
-Run Order Service:
+Stop the system:
 
 ```bash
-cd order-service
-npm install
-npm run dev
+docker compose down
 ```
 
-Run Auth Service:
+If you need to reset PostgreSQL and Redis volumes:
 
 ```bash
-cd auth-service
-npm install
-npm run dev
+docker compose down -v
+docker compose up --build
 ```
 
 ---
 
-## Important Endpoints
+## Main API Endpoints
 
 ### API Gateway
 
 ```http
-GET http://localhost:4000/health
+GET  http://localhost:4000/health
+GET  http://localhost:4000/api/products
+GET  http://localhost:4000/api/products/1
 
-GET http://localhost:4000/api/products
-GET http://localhost:4000/api/products/1
-
-GET http://localhost:4000/api/auth/health
 POST http://localhost:4000/api/auth/register
 POST http://localhost:4000/api/auth/login
-GET http://localhost:4000/api/auth/verify
+GET  http://localhost:4000/api/auth/verify
 
-GET http://localhost:4000/api/orders/health
+GET  http://localhost:4000/api/orders/health
 POST http://localhost:4000/api/orders
-GET http://localhost:4000/api/orders/circuit-breaker/payment
+GET  http://localhost:4000/api/orders/circuit-breaker/payment
 ```
-`POST /api/orders` requires a valid JWT token in the Authorization header.
+
+`POST /api/orders` is protected and requires a JWT token:
 
 ```text
 Authorization: Bearer <jwt-token>
 ```
 
-### Product Service
+---
+
+## Example Workflow
+
+### 1. Register user
 
 ```http
-GET http://localhost:4001/health
-GET http://localhost:4001/products
-GET http://localhost:4001/products/1
-DELETE http://localhost:4001/cache
+POST http://localhost:4000/api/auth/register
 ```
-
-### Payment Service
-
-```http
-GET http://localhost:4002/health
-POST http://localhost:4002/payments
-```
-
-Example payment request:
 
 ```json
 {
-  "orderId": "ORD-1001",
-  "amount": 1299,
-  "mode": "success"
+  "name": "Prince Levin",
+  "email": "prince@example.com",
+  "password": "Password@123"
 }
 ```
 
-Supported payment modes:
-
-```text
-success
-failure
-slow
-random
-```
-
-### Order Service
+### 2. Login and get JWT token
 
 ```http
-GET http://localhost:4003/health
-POST http://localhost:4003/orders
-GET http://localhost:4003/circuit-breaker/payment
+POST http://localhost:4000/api/auth/login
 ```
 
-Example order request:
+```json
+{
+  "email": "prince@example.com",
+  "password": "Password@123"
+}
+```
+
+### 3. Create protected order
+
+```http
+POST http://localhost:4000/api/orders
+```
+
+Header:
+
+```text
+Authorization: Bearer <jwt-token>
+```
+
+Body:
 
 ```json
 {
@@ -296,135 +244,47 @@ Example order request:
 }
 ```
 
-Supported payment modes:
-
-```text
-success
-failure
-slow
-random
-```
-
-### Auth Service
-
-```http
-GET http://localhost:4004/health
-POST http://localhost:4004/auth/register
-POST http://localhost:4004/auth/login
-GET http://localhost:4004/auth/verify
-GET http://localhost:4004/auth/users
-```
-
-Example register request:
-
-```json
-{
-  "name": "Prince Levin",
-  "email": "prince@example.com",
-  "password": "Password@123"
-}
-```
-
-Example login request:
-
-```json
-{
-  "email": "prince@example.com",
-  "password": "Password@123"
-}
-```
-
-Verify token request header:
-
-```text
-Authorization: Bearer <jwt-token>
-```
-
 ---
 
-## Reliability Patterns Implemented
+## Reliability Patterns Demonstrated
 
 ### Cache-Aside Pattern
-
-The Product Service checks Redis before reading from PostgreSQL.
 
 ```text
 Request
   ↓
 Check Redis
   ↓
-Cache HIT → return cached data
+Cache HIT → return cached product data
   ↓
-Cache MISS → read PostgreSQL
-  ↓
-Store result in Redis
-  ↓
-Return response
+Cache MISS → read PostgreSQL → store in Redis → return response
 ```
-
-### Timeout Handling
-
-The Order Service does not wait forever for Payment Service.
-
-If Payment Service is too slow, the request times out.
 
 ### Retry with Exponential Backoff
 
-The Order Service retries failed payment calls with increasing delay.
-
 ```text
-Attempt 1 fails
+Payment call fails
   ↓
-Wait 500ms
+Wait and retry
   ↓
-Attempt 2 fails
+Retry again with increased delay
   ↓
-Wait 1000ms
-  ↓
-Attempt 3 fails
-  ↓
-Return controlled failure response
+Return controlled failure if all attempts fail
 ```
 
-### Circuit Breaker Pattern
-
-Circuit breaker behavior is implemented for Payment Service calls.
+### Circuit Breaker
 
 ```text
-CLOSED
-  ↓
-Normal calls allowed
-
-OPEN
-  ↓
-Calls blocked temporarily after repeated failures
-
-HALF_OPEN
-  ↓
-One test call allowed after cooldown
+CLOSED     → normal calls allowed
+OPEN       → payment calls blocked after repeated failures
+HALF_OPEN  → one test request allowed after cooldown
 ```
 
-### JWT Authentication
+### Request Tracing
 
-The Auth Service allows users to register, login, and receive a JWT token.
+Each request is assigned a `requestId`, which is forwarded across services.
 
-```text
-Register User
-  ↓
-Hash Password
-  ↓
-Login User
-  ↓
-Generate JWT Token
-  ↓
-Verify JWT Token
-```
-
-The JWT token is used by the API Gateway to protect order creation APIs.
-
-### Structured Logging and Request Tracing
-
-Each service logs requests in structured JSON format.
+Example structured log:
 
 ```json
 {
@@ -439,8 +299,6 @@ Each service logs requests in structured JSON format.
 }
 ```
 
-The same `requestId` is forwarded across services, making it easier to trace one request across API Gateway, Product Service, Auth Service, Order Service, and Payment Service.
-
 ---
 
 ## Project Structure
@@ -449,59 +307,10 @@ The same `requestId` is forwarded across services, making it easier to trace one
 resilient-microservices-backend
 │
 ├── api-gateway
-│   ├── src
-│   │   ├── utils
-│   │   │   └── logger.js
-│   │   └── server.js
-│   ├── package.json
-│   ├── package-lock.json
-│   └── .env
-│
 ├── product-service
-│   ├── src
-│   │   ├── db
-│   │   │   ├── pool.js
-│   │   │   ├── redis.js
-│   │   │   └── init.sql
-│   │   ├── utils
-│   │   │   └── logger.js
-│   │   └── server.js
-│   ├── package.json
-│   ├── package-lock.json
-│   └── .env
-│
 ├── payment-service
-│   ├── src
-│   │   ├── utils
-│   │   │   └── logger.js
-│   │   └── server.js
-│   ├── package.json
-│   ├── package-lock.json
-│   └── .env
-│
 ├── order-service
-│   ├── src
-│   │   ├── clients
-│   │   │   └── paymentClient.js
-│   │   ├── resilience
-│   │   │   └── circuitBreaker.js
-│   │   ├── utils
-│   │   │   └── logger.js
-│   │   └── server.js
-│   ├── package.json
-│   ├── package-lock.json
-│   └── .env
-│
 ├── auth-service
-│   ├── src
-│   │   ├── middleware
-│   │   │   └── authMiddleware.js
-│   │   ├── utils
-│   │   │   └── logger.js
-│   │   └── server.js
-│   ├── package.json
-│   ├── package-lock.json
-│   └── .env
 │
 ├── docs
 │   ├── ARCHITECTURE.md
@@ -513,34 +322,34 @@ resilient-microservices-backend
 └── .gitignore
 ```
 
+Detailed service-level structure and setup instructions are available in the `docs` folder.
+
 ---
 
 ## Documentation
 
-Detailed documentation is available in the `docs` folder:
-
-- `docs/ARCHITECTURE.md` — system architecture and design decisions
-- `docs/API.md` — endpoints and sample requests/responses
-- `docs/SETUP.md` — setup and local running instructions
+- `docs/ARCHITECTURE.md` — system architecture and reliability design
+- `docs/API.md` — API endpoints, request bodies, and sample responses
+- `docs/SETUP.md` — local setup, Docker Compose, and testing instructions
 
 ---
 
-## Why This Project Matters
+## What This Project Demonstrates
 
-In real-world backend systems, building an API is only the first step.
+This project is designed to show practical backend engineering skills beyond basic CRUD APIs.
 
-Production systems must handle:
+It demonstrates experience with:
 
-- Slow services
-- Failed services
-- Network latency
-- Database bottlenecks
-- Retry storms
-- Cache consistency
-- Observability issues
-- Debugging across multiple services
-
-This project explores those problems practically through a microservices-based backend system.
+- Designing microservices
+- Building API Gateway based routing
+- Securing APIs with JWT
+- Handling downstream service failures
+- Implementing retry and circuit breaker patterns
+- Using Redis for caching
+- Working with PostgreSQL
+- Running services with Docker Compose
+- Adding structured logs and request tracing
+- Debugging distributed backend flows
 
 ---
 

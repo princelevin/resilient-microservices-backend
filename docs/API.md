@@ -1,12 +1,20 @@
 # API Documentation
 
+This document describes the main API endpoints exposed by the Resilient Microservices Backend System.
+
+The preferred client-facing entry point is the API Gateway.
+
+---
+
 ## Request Tracing and Logging
 
-All services return a `requestId` in the API response.
+All services return a `requestId` in API responses.
 
 The same `requestId` is forwarded across API Gateway and backend services, making it easier to trace one request across multiple services.
 
-Each service also logs requests in structured JSON format with details such as:
+Each service also logs requests in structured JSON format.
+
+Example log:
 
 ```json
 {
@@ -23,9 +31,7 @@ Each service also logs requests in structured JSON format with details such as:
 
 ---
 
-## API Gateway
-
-Base URL:
+## Base URL
 
 ```text
 http://localhost:4000
@@ -33,16 +39,35 @@ http://localhost:4000
 
 The API Gateway creates or forwards an `X-Request-Id` header for request tracing.
 
+---
+
+## API Gateway Endpoints
+
 ### Health Check
 
 ```http
 GET /health
 ```
 
+Checks whether the API Gateway is running.
+
+---
+
+## Product APIs
+
 ### Get Products
 
 ```http
 GET /api/products
+```
+
+Routes the request to Product Service.
+
+The Product Service reads data using Redis cache-aside behavior:
+
+```text
+Redis HIT  → return cached data
+Redis MISS → read PostgreSQL, cache result, return data
 ```
 
 ### Get Product By ID
@@ -51,13 +76,21 @@ GET /api/products
 GET /api/products/1
 ```
 
-### Auth Service Health Through Gateway
+Routes the request to Product Service and returns a single product by ID.
+
+---
+
+## Auth APIs
+
+### Auth Service Health
 
 ```http
 GET /api/auth/health
 ```
 
-### Register User Through Gateway
+Checks whether Auth Service is reachable through API Gateway.
+
+### Register User
 
 ```http
 POST /api/auth/register
@@ -73,7 +106,22 @@ Request body:
 }
 ```
 
-### Login User Through Gateway
+Sample response:
+
+```json
+{
+  "gateway": "api-gateway",
+  "routedTo": "auth-service",
+  "data": {
+    "service": "auth-service",
+    "status": "success",
+    "message": "User registered successfully"
+  },
+  "requestId": "example-request-id"
+}
+```
+
+### Login User
 
 ```http
 POST /api/auth/login
@@ -88,7 +136,25 @@ Request body:
 }
 ```
 
-### Verify JWT Token Through Gateway
+Sample response:
+
+```json
+{
+  "gateway": "api-gateway",
+  "routedTo": "auth-service",
+  "data": {
+    "service": "auth-service",
+    "status": "success",
+    "message": "Login successful",
+    "token": "jwt-token-here",
+    "tokenType": "Bearer",
+    "expiresIn": "1h"
+  },
+  "requestId": "example-request-id"
+}
+```
+
+### Verify JWT Token
 
 ```http
 GET /api/auth/verify
@@ -100,232 +166,45 @@ Header:
 Authorization: Bearer <jwt-token>
 ```
 
-### Order Service Health Through Gateway
+Sample response:
+
+```json
+{
+  "gateway": "api-gateway",
+  "routedTo": "auth-service",
+  "data": {
+    "service": "auth-service",
+    "status": "success",
+    "message": "Token is valid"
+  },
+  "requestId": "example-request-id"
+}
+```
+
+---
+
+## Order APIs
+
+### Order Service Health
 
 ```http
 GET /api/orders/health
 ```
 
-### Create Order Through Gateway
+Checks whether Order Service is reachable through API Gateway.
+
+### Create Order
 
 ```http
 POST /api/orders
 ```
 
-This endpoint is protected and requires a JWT token.
+This endpoint is protected and requires a valid JWT token.
 
 Header:
 
 ```text
 Authorization: Bearer <jwt-token>
-```
-
-Request body:
-
-```json
-{
-  "productId": 1,
-  "quantity": 1,
-  "amount": 1299,
-  "paymentMode": "success"
-}
-```
-
-Sample response without token:
-
-```json
-{
-  "gateway": "api-gateway",
-  "status": "failed",
-  "message": "Authorization token is missing"
-}
-```
-
-Successful response includes the authenticated user, the order result, and a `requestId` for tracing the request across API Gateway, Auth Service, Order Service, and Payment Service.
-
-### Payment Circuit Breaker Status Through Gateway
-
-```http
-GET /api/orders/circuit-breaker/payment
-```
-
-> Auth Service can be called directly on port `4004`, but the preferred client-facing path is through API Gateway using `/api/auth`.
-
----
-
-## Product Service
-
-Base URL:
-
-```text
-http://localhost:4001
-```
-
-### Health Check
-
-```http
-GET /health
-```
-
-### Get Products
-
-```http
-GET /products
-```
-
-Sample response can return from PostgreSQL on cache miss:
-
-```json
-{
-  "service": "product-service",
-  "source": "postgresql",
-  "cache": "MISS",
-  "count": 3,
-  "data": []
-}
-```
-
-Or from Redis on cache hit:
-
-```json
-{
-  "service": "product-service",
-  "source": "redis",
-  "cache": "HIT",
-  "count": 3,
-  "data": []
-}
-```
-
-### Get Product By ID
-
-```http
-GET /products/1
-```
-
-### Clear Product Cache
-
-```http
-DELETE /cache
-```
-
----
-
-## Payment Service
-
-Base URL:
-
-```text
-http://localhost:4002
-```
-
-### Health Check
-
-```http
-GET /health
-```
-
-### Process Payment
-
-```http
-POST /payments
-```
-
-Request body:
-
-```json
-{
-  "orderId": "ORD-1001",
-  "amount": 1299,
-  "mode": "success"
-}
-```
-
-Supported modes:
-
-```text
-success
-failure
-slow
-random
-```
-
-### Success Payment Response
-
-```json
-{
-  "service": "payment-service",
-  "status": "success",
-  "message": "Payment processed successfully",
-  "paymentId": "PAY-...",
-  "orderId": "ORD-1001",
-  "amount": 1299,
-  "mode": "success"
-}
-```
-
-### Failed Payment Response
-
-```json
-{
-  "service": "payment-service",
-  "status": "failed",
-  "message": "Payment failed due to insufficient funds",
-  "orderId": "ORD-1002",
-  "amount": 899,
-  "mode": "failure"
-}
-```
-
-### Slow Payment Response
-
-```json
-{
-  "service": "payment-service",
-  "status": "success",
-  "message": "Payment processed successfully after delay",
-  "delayMs": 5000
-}
-```
-
-### Random Payment Response
-
-```json
-{
-  "service": "payment-service",
-  "status": "success",
-  "message": "Random payment succeeded",
-  "paymentId": "PAY-RANDOM-...",
-  "orderId": "ORD-1004",
-  "amount": 500,
-  "mode": "random"
-}
-```
-
-Random mode can return either success or failure.
-
----
-
-> Order Service can be called directly on port `4003`, but the preferred client-facing path is through API Gateway using `/api/orders`.
-
-## Order Service
-
-Base URL:
-
-```text
-http://localhost:4003
-```
-
-### Health Check
-
-```http
-GET /health
-```
-
-### Create Order
-
-```http
-POST /orders
 ```
 
 Request body:
@@ -348,107 +227,85 @@ slow
 random
 ```
 
-### Successful Order Response
+Sample success response:
 
 ```json
 {
-  "service": "order-service",
-  "status": "success",
-  "orderStatus": "CONFIRMED",
-  "message": "Order created and payment completed successfully"
+  "gateway": "api-gateway",
+  "routedTo": "order-service",
+  "authenticatedUser": {
+    "userId": "USER-...",
+    "email": "prince@example.com",
+    "name": "Prince Levin"
+  },
+  "data": {
+    "service": "order-service",
+    "status": "success",
+    "orderStatus": "CONFIRMED",
+    "message": "Order created and payment completed successfully"
+  },
+  "requestId": "example-request-id"
 }
 ```
 
-### Failed Order Response
+Sample response without token:
 
 ```json
 {
-  "service": "order-service",
+  "gateway": "api-gateway",
   "status": "failed",
-  "orderStatus": "PAYMENT_FAILED",
-  "message": "Order could not be completed because payment failed"
-}
-```
-
-### Circuit Breaker Status
-
-```http
-GET /circuit-breaker/payment
-```
-
-Sample CLOSED response:
-
-```json
-{
-  "service": "order-service",
-  "dependency": "payment-service",
-  "circuitBreaker": {
-    "state": "CLOSED",
-    "failureCount": 0,
-    "failureThreshold": 3,
-    "cooldownTimeMs": 60000
-  }
-}
-```
-
-Sample OPEN response:
-
-```json
-{
-  "service": "order-service",
-  "dependency": "payment-service",
-  "circuitBreaker": {
-    "state": "OPEN",
-    "failureCount": 3,
-    "failureThreshold": 3,
-    "cooldownTimeMs": 60000
-  }
-}
-```
-
-Sample fast failure when circuit is open:
-
-```json
-{
-  "service": "order-service",
-  "status": "failed",
-  "orderStatus": "PAYMENT_FAILED",
-  "payment": {
-    "success": false,
-    "circuitBreakerOpen": true,
-    "error": {
-      "message": "Payment Service circuit is OPEN. Request blocked to protect the system.",
-      "code": "CIRCUIT_OPEN",
-      "httpStatus": 503
-    },
-    "attempts": []
-  }
+  "message": "Authorization token is missing",
+  "requestId": "example-request-id"
 }
 ```
 
 ---
 
-## Auth Service
+## Circuit Breaker API
 
-Base URL:
+### Payment Circuit Breaker Status
+
+```http
+GET /api/orders/circuit-breaker/payment
+```
+
+Sample response:
+
+```json
+{
+  "gateway": "api-gateway",
+  "routedTo": "order-service",
+  "data": {
+    "service": "order-service",
+    "dependency": "payment-service",
+    "circuitBreaker": {
+      "state": "CLOSED",
+      "failureCount": 0,
+      "failureThreshold": 3,
+      "cooldownTimeMs": 60000
+    }
+  },
+  "requestId": "example-request-id"
+}
+```
+
+Possible circuit breaker states:
 
 ```text
-http://localhost:4004
+CLOSED
+OPEN
+HALF_OPEN
 ```
 
-### Health Check
+---
+
+## Example End-to-End Workflow
+
+### 1. Register user
 
 ```http
-GET /health
+POST /api/auth/register
 ```
-
-### Register User
-
-```http
-POST /auth/register
-```
-
-Request body:
 
 ```json
 {
@@ -458,28 +315,11 @@ Request body:
 }
 ```
 
-Sample response:
-
-```json
-{
-  "service": "auth-service",
-  "status": "success",
-  "message": "User registered successfully",
-  "user": {
-    "id": "USER-...",
-    "name": "Prince Levin",
-    "email": "prince@example.com"
-  }
-}
-```
-
-### Login User
+### 2. Login and copy JWT token
 
 ```http
-POST /auth/login
+POST /api/auth/login
 ```
-
-Request body:
 
 ```json
 {
@@ -488,23 +328,16 @@ Request body:
 }
 ```
 
-Sample response:
+Copy:
 
-```json
-{
-  "service": "auth-service",
-  "status": "success",
-  "message": "Login successful",
-  "token": "jwt-token-here",
-  "tokenType": "Bearer",
-  "expiresIn": "1h"
-}
+```text
+data.token
 ```
 
-### Verify JWT Token
+### 3. Create protected order
 
 ```http
-GET /auth/verify
+POST /api/orders
 ```
 
 Header:
@@ -513,41 +346,88 @@ Header:
 Authorization: Bearer <jwt-token>
 ```
 
-Sample response:
+Body:
 
 ```json
 {
-  "service": "auth-service",
-  "status": "success",
-  "message": "Token is valid",
-  "user": {
-    "userId": "USER-...",
-    "email": "prince@example.com",
-    "name": "Prince Levin"
-  }
+  "productId": 1,
+  "quantity": 1,
+  "amount": 1299,
+  "paymentMode": "success"
 }
 ```
 
-### Get Registered Users
+---
+
+## Direct Service Endpoints
+
+These endpoints are useful for internal testing, but client-facing requests should go through the API Gateway.
+
+### Product Service
+
+Base URL:
+
+```text
+http://localhost:4001
+```
 
 ```http
+GET /health
+GET /products
+GET /products/1
+DELETE /cache
+```
+
+### Payment Service
+
+Base URL:
+
+```text
+http://localhost:4002
+```
+
+```http
+GET /health
+POST /payments
+```
+
+### Order Service
+
+Base URL:
+
+```text
+http://localhost:4003
+```
+
+```http
+GET /health
+POST /orders
+GET /circuit-breaker/payment
+```
+
+### Auth Service
+
+Base URL:
+
+```text
+http://localhost:4004
+```
+
+```http
+GET /health
+POST /auth/register
+POST /auth/login
+GET /auth/verify
 GET /auth/users
 ```
 
-Sample response:
+---
 
-```json
-{
-  "service": "auth-service",
-  "count": 1,
-  "users": [
-    {
-      "id": "USER-...",
-      "name": "Prince Levin",
-      "email": "prince@example.com"
-    }
-  ]
-}
-```
+## Notes
 
-> Current Auth Service uses an in-memory user store. Registered users are cleared when the service restarts.
+- `POST /api/orders` requires a valid JWT token.
+- Auth Service currently uses an in-memory user store, so registered users are cleared when the Auth Service restarts.
+- Product reads use Redis cache-aside behavior.
+- Order creation calls Payment Service through Order Service.
+- Payment Service can simulate success, failure, slow response, and random behavior.
+- API Gateway forwards request IDs to downstream services for traceability.
